@@ -1,0 +1,63 @@
+# =============================================================================
+# Sentinel — Docker build context ignore
+# =============================================================================
+# Excludes dev-only / runtime / secret files from the Docker build context,
+# keeping image builds fast and preventing secrets from leaking into layers.
+# =============================================================================
+
+# Dependencies (re-installed inside the image)
+node_modules
+**/node_modules
+
+# Next.js build artifacts (rebuilt inside the image)
+.next
+out
+build
+
+# Version control & metadata
+.git
+.gitignore
+.github
+
+# Local databases & storage (runtime data — never in the image)
+db/*.db
+db/*.db-journal
+storage
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+dev.log
+server.log
+
+# Tests (not needed at runtime)
+tests
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.ts
+
+# Docs & examples
+docs
+examples
+download
+skills
+
+# Env files — secrets injected at runtime, never baked into the image
+.env
+.env.*
+!.env.example
+
+# Docker
+docker/Dockerfile
+docker/docker-compose.yml
+docker/.dockerignore
+
+# Misc
+.DS_Store
+*.md
+Caddyfile
+worklog.md
+bunfig.toml

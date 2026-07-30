@@ -1,0 +1,314 @@
+// =============================================================================
+// Sentinel — Prisma Schema (Development: SQLite)
+// =============================================================================
+// This schema runs on SQLite for the local sandbox so the platform boots
+// without a database server. It is structurally identical to the production
+// PostgreSQL schema (see schema.postgres.prisma).
+//
+// PostGIS geometry columns are intentionally NOT modeled in Prisma (Prisma has
+// no native geometry type). In production they are managed via raw SQL
+// migrations (see prisma/sql/postgis.sql) and accessed through repository
+// raw queries. This keeps the ORM models portable across both databases.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  // Generated types include a shared `SentinelPrismaClient` augmentation.
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// IAM — Identity & Access Management
+// =============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  passwordHash  String? // null for OAuth-only accounts
+  status        String    @default("active") // active | suspended | locked | pending
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  userRoles     UserRole[]
+  auditLogs     AuditLog[]
+  createdFlags  FeatureFlag[]  @relation("FlagCreatedBy")
+  updatedFlags  FeatureFlag[]  @relation("FlagUpdatedBy")
+
+  @@index([status])
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String // oauth | oidc | credentials
+  provider          String // google | github | azure-ad | credentials
+  providerAccountId String
+  refreshToken      String?
+  accessToken       String?
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// =============================================================================
+// RBAC — Role-Based Access Control
+// =============================================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. "admin", "analyst", "field-agent", "citizen-reporter"
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) // system roles cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@index([key])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. "cases:read", "reports:create"
+  name        String
+  description String?
+  resource    String // e.g. "cases", "reports", "users"
+  action      String // e.g. "read", "create", "update", "delete", "approve"
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+  expiresAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+// =============================================================================
+// Audit Log (append-only, tamper-evident)
+// =============================================================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  actorId     String?  // user id (null for system events)
+  actorType   String   @default("user") // user | system | service
+  action      String   // e.g. "user.login", "feature_flag.updated"
+  resource    String   // target resource type
+  resourceId  String?  // target resource id
+  outcome     String   @default("success") // success | failure | denied
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?  // correlation id for distributed tracing
+  metadata    String?  // JSON string (portable across sqlite/postgres)
+  hash        String?  // chaining hash for tamper-evidence
+  prevHash    String?
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([timestamp])
+  @@index([actorId])
+  @@index([action])
+  @@index([resource, resourceId])
+}
+
+// =============================================================================
+// Feature Flags
+// =============================================================================
+
+model FeatureFlag {
+  id          String    @id @default(cuid())
+  key         String    @unique // e.g. "intelligence.engine.v2"
+  name        String
+  description String?
+  enabled     Boolean   @default(false)
+  // rollout: percentage of eligible users (0-100). 100 = all.
+  rolloutPercentage Int @default(0)
+  // strategy: boolean | percentage | segment | environment
+  strategy    String    @default("boolean")
+  // config: JSON string of strategy-specific config (segments, envs, etc.)
+  config      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  createdById String?
+  updatedById String?
+
+  createdBy User? @relation("FlagCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("FlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  segments  FeatureFlagSegment[]
+
+  @@index([enabled])
+  @@index([key])
+}
+
+model FeatureFlagSegment {
+  id           String  @id @default(cuid())
+  flagId       String
+  name         String
+  // rule: JSON string describing the segment predicate
+  rule         String
+  priority     Int     @default(0)
+
+  flag FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+
+  @@index([flagId])
+}
+
+// =============================================================================
+// Event-Driven Architecture — Transactional Outbox
+// =============================================================================
+// Domain events are written to the outbox in the same DB transaction as the
+// state change that produced them, then a background relay publishes them to
+// the event bus. This guarantees at-least-once delivery without 2PC.
+// =============================================================================
+
+model OutboxEvent {
+  id            String   @id @default(cuid())
+  aggregateType String   // e.g. "User", "FeatureFlag"
+  aggregateId   String
+  eventType     String   // e.g. "user.created"
+  payload       String   // JSON string
+  metadata      String?  // JSON string (traceId, userId, etc.)
+  occurredAt    DateTime @default(now())
+  // status: pending | published | failed | dead_letter
+  status        String   @default("pending")
+  attempts      Int      @default(0)
+  lastError     String?
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([status, occurredAt])
+  @@index([aggregateType, aggregateId])
+  @@index([eventType])
+}
+
+// =============================================================================
+// Background Jobs — durable record
+// =============================================================================
+
+model JobRecord {
+  id         String    @id @default(cuid())
+  queue      String    // e.g. "default", "ingest", "notifications"
+  name       String    // job handler name
+  payload    String    // JSON string
+  // status: queued | running | completed | failed | retrying | dead_letter
+  status     String    @default("queued")
+  attempts   Int       @default(0)
+  maxAttempts Int      @default(3)
+  lastError  String?
+  scheduledAt DateTime @default(now())
+  startedAt  DateTime?
+  completedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([queue])
+  @@index([name])
+}
+
+// =============================================================================
+// Object Storage — metadata for stored objects
+// =============================================================================
+
+model StoredObject {
+  id          String   @id @default(cuid())
+  key         String   @unique // storage key (path)
+  bucket      String   @default("default")
+  provider    String   // local | s3 | minio
+  contentType String?
+  size        Int      @default(0)
+  checksum    String?  // sha256
+  // ownerType/ownerId: e.g. ("Report", "abc123")
+  ownerType   String?
+  ownerId     String?
+  metadata    String?  // JSON string
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([bucket, key])
+  @@index([ownerType, ownerId])
+}
+
+// =============================================================================
+// Health Checks — recent snapshots
+// =============================================================================
+
+model HealthCheckResult {
+  id          String   @id @default(cuid())
+  checkName   String   // e.g. "database", "storage", "event-bus"
+  status      String   // healthy | degraded | unhealthy
+  latencyMs   Int
+  message     String?
+  checkedAt   DateTime @default(now())
+
+  @@index([checkName, checkedAt])
+}

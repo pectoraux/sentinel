@@ -1,0 +1,188 @@
+# =============================================================================
+# Sentinel — Production docker-compose
+# =============================================================================
+# Brings up the full platform stack: PostgreSQL+PostGIS, Redis (event bus +
+# job queue), MinIO (S3-compatible object storage), and the Sentinel web app.
+#
+# Usage:
+#   cp .env.example .env   # then edit secrets
+#   docker compose -f docker/docker-compose.yml up -d --build
+#
+# All secrets are read from the host .env file (git-ignored). Never commit
+# real secrets. In production, inject via a secrets manager.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 + PostGIS 3.4 — primary datastore
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - sentinel-net
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — event bus pub/sub + BullMQ job queue backend
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - sentinel-net
+
+  # ---------------------------------------------------------------------------
+  # MinIO — S3-compatible object storage (evidence media, satellite imagery)
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sentinel}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-sentinel-secret-key}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - sentinel-net
+
+  # ---------------------------------------------------------------------------
+  # Sentinel web app (Next.js standalone)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+
+      # --- Database (PostgreSQL + PostGIS) ---
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD:-sentinel}@postgres:5432/${POSTGRES_DB:-sentinel}?schema=public
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+      DATABASE_POOL_TIMEOUT_MS: ${DATABASE_POOL_TIMEOUT_MS:-30000}
+
+      # Postgres connection for the entrypoint's raw SQL step (psql + pg_isready)
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+
+      # --- Auth ---
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      AUTH_PROVIDERS: ${AUTH_PROVIDERS:-credentials}
+      AUTH_SESSION_STRATEGY: ${AUTH_SESSION_STRATEGY:-jwt}
+      AUTH_SESSION_MAX_AGE_SECONDS: ${AUTH_SESSION_MAX_AGE_SECONDS:-86400}
+
+      # --- Object Storage (MinIO) ---
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3}
+      STORAGE_S3_ENDPOINT: http://minio:9000
+      STORAGE_S3_REGION: ${STORAGE_S3_REGION:-us-east-1}
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-sentinel-media}
+      STORAGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sentinel}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-sentinel-secret-key}
+      STORAGE_S3_FORCE_PATH_STYLE: "true"
+
+      # --- Event Bus (Redis pub/sub) ---
+      EVENT_BUS_PROVIDER: redis
+      EVENT_BUS_REDIS_URL: redis://redis:6379
+
+      # --- Background Jobs (Redis / BullMQ) ---
+      JOB_QUEUE_PROVIDER: redis
+      JOB_QUEUE_REDIS_URL: redis://redis:6379
+      JOB_QUEUE_CONCURRENCY: ${JOB_QUEUE_CONCURRENCY:-4}
+
+      # --- Observability ---
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-sentinel-web}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_TRACES_ENABLED: ${OTEL_TRACES_ENABLED:-false}
+      OTEL_METRICS_ENABLED: ${OTEL_METRICS_ENABLED:-false}
+      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # --- Feature Flags ---
+      FEATURE_FLAG_PROVIDER: ${FEATURE_FLAG_PROVIDER:-database}
+
+      # --- Public (inlined at build time; must match builder) ---
+      NEXT_PUBLIC_APP_NAME: Sentinel
+      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-0.1.0}
+      NEXT_PUBLIC_API_VERSION: v1
+
+      # --- Security ---
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      HEALTH_CHECK_TIMEOUT_MS: ${HEALTH_CHECK_TIMEOUT_MS:-5000}
+    ports:
+      - "3000:3000"
+    volumes:
+      # Bind the prisma dir so the entrypoint can run db push + seed even if
+      # the in-image copy is stale (useful for dev iteration).
+      - ../prisma:/app/prisma:ro
+    networks:
+      - sentinel-net
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  miniodata:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+networks:
+  sentinel-net:
+    driver: bridge
