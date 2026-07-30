@@ -53,6 +53,15 @@ model User {
   auditLogs     AuditLog[]
   createdFlags  FeatureFlag[]  @relation("FlagCreatedBy")
   updatedFlags  FeatureFlag[]  @relation("FlagUpdatedBy")
+  orgMemberships OrganizationMember[]
+  orgVerifiedBy  Organization[]  @relation("OrgVerifiedBy")
+  devices        Device[]
+  verifications  IdentityVerification[]
+  trustProfile   TrustProfile?
+  trustEvents    TrustEvent[]
+  roleSwitches   RoleSwitchLog[]
+  activeRole     ActiveRole?
+  invitedOrgs    OrganizationInvitation[]  @relation("InvitedBy")
 
   @@index([status])
   @@index([email])
@@ -354,4 +363,187 @@ model Report {
   @@index([sourceType])
   @@index([verified])
   @@index([incidentId])
+}
+
+// =============================================================================
+// MILESTONE 2 — Identity & Trust Platform
+// =============================================================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  type        String   // government_agency | ngo | researcher | regulator | community
+  country     String?
+  region      String?
+  description String?
+  logoUrl     String?
+  status      String   @default("pending_verification")
+  verifiedAt  DateTime?
+  verifiedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     OrganizationMember[]
+  invitations OrganizationInvitation[]
+  verifier    User? @relation("OrgVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  devices     Device[]
+  verifications IdentityVerification[]
+
+  @@index([type])
+  @@index([status])
+  @@index([country])
+}
+
+model OrganizationMember {
+  id            String   @id @default(cuid())
+  organizationId String
+  userId        String
+  role          String   @default("member")
+  joinedAt      DateTime @default(now())
+  invitedBy     String?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model OrganizationInvitation {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String
+  role           String   @default("member")
+  token          String   @unique
+  invitedById    String
+  status         String   @default("pending")
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedById   String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User          @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+}
+
+model Device {
+  id            String   @id @default(cuid())
+  userId        String
+  organizationId String?
+  fingerprint   String   @unique
+  label         String?
+  platform      String?
+  userAgent     String?
+  status        String   @default("unverified")
+  lastSeenAt    DateTime @default(now())
+  lastSeenIp    String?
+  location      String?
+  trustedAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  createdAt     DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model IdentityVerification {
+  id              String   @id @default(cuid())
+  userId          String
+  organizationId  String?
+  type            String
+  status          String   @default("pending")
+  documentReference String?
+  submittedData   String?
+  reviewerNotes   String?
+  reviewedById    String?
+  submittedAt     DateTime @default(now())
+  reviewedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([type])
+}
+
+model TrustProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  score           Int      @default(0)
+  tier            String   @default("unverified")
+  factors         String?
+  badges          String?
+  lastRecalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([score])
+  @@index([tier])
+}
+
+model TrustEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  delta       Int
+  reason      String?
+  metadata    String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model RoleSwitchLog {
+  id          String   @id @default(cuid())
+  userId      String
+  fromRole    String?
+  toRole      String
+  contextType String   @default("global")
+  contextId   String?
+  reason      String?
+  ip          String?
+  switchedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([switchedAt])
+}
+
+model ActiveRole {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  roleKey     String
+  contextType String   @default("global")
+  contextId   String?
+  setAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

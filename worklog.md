@@ -86,3 +86,36 @@ Stage Summary:
 - All 23 requested foundation capabilities are implemented and production-grade.
 - Future milestones (intelligence, cases, digital-twin, community) plug into the bounded-context + event-bus + job-queue + storage + RBAC + feature-flag foundations laid here.
 - Dev DB is SQLite (sandbox); production schema + PostGIS SQL + Docker compose target PostgreSQL+PostGIS.
+
+---
+Task ID: M2
+Agent: orchestrator
+Task: Milestone 2 — Identity & Trust Platform
+
+Work Log:
+- Extended Prisma schema (both SQLite + PostgreSQL) with 8 new models: Organization, OrganizationMember, OrganizationInvitation, Device, IdentityVerification, TrustProfile, TrustEvent, RoleSwitchLog, ActiveRole. Added reverse relations to User model.
+- Built Identity bounded context (src/modules/identity/):
+  - Domain: Organization aggregate root (lifecycle: pending_verification→active→suspended→dissolved, member management, verification), Device entity (unverified→active→trusted→revoked→lost, fingerprinting), IdentityVerification aggregate (pending→under_review→approved/rejected/expired), TrustProfile value object (score 0-100, tier computation, badges), domain events for all aggregates.
+  - Application services: OrganizationService (create/verify/list/members/invite), DeviceService (register/trust/revoke), IdentityVerificationService (submit/approve/reject + auto trust-event), TrustProfileService (recalculate from factors + events, leaderboard), SessionService (list/revoke), RoleSwitchService (switch with org-context validation, history logging). All write domain events to the transactional outbox.
+- Extended RBAC catalogue: +13 identity permissions (organizations:read/manage/verify/invite, devices:read/manage, identity:submit_verification/review_verifications/view_trust/manage_trust/switch_role, sessions:manage). Added 2 new system roles: inspector (reviews verifications, inspects orgs) and moderator (manages trust, handles disputes). Updated admin + existing roles with identity permissions.
+- Built 18 new API routes under /api/v1/: identity-summary (public aggregate), organizations (+[id]), devices (+[id]), verifications (+[id]), trust, sessions, role-switch. All auth-gated routes return 401 unauthenticated, 403 forbidden correctly. Updated /api/v1/info directory.
+- Seed: 6 sample organizations (EPA Ghana, Minerals Commission, WACAM, KNUST Geoscience, Forestry Commission, Akuapem Community Watch) spanning all 5 org types (government_agency, regulator, ngo, researcher, community). 5 demo users (inspector, moderator, analyst, field_agent, citizen_reporter) each with RBAC role, org membership, device, verifications, and computed trust profile. Admin gets elite tier trust profile.
+- UI: Converted dashboard to a tabbed layout (DashboardTabs client component). Default tab = "Identity & Trust" (M2). Second tab = "Platform Foundation" (M1). Built IdentityDashboard client component with: 6 KPIs (orgs/members/devices/verifications/elite/pending), Organizations card (type breakdown + recent orgs list with status dots), Trust Leaderboard card (tier distribution + top 5 profiles with badges), Identity Verifications card (status summary + type breakdown + recent submissions), Devices & Sessions card (trusted/untrusted bars + tier distribution histogram). Auto-refreshes every 30s. Updated hero, footer, and checklist to reflect M2.
+- Fixed: tab child ordering (Identity is 2nd child = 2nd tab, Foundation is 1st child = 1st tab), Card imports in identity-dashboard, eslint-disable cleanup in seed.
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification (single session):
+  • Identity tab (default): all 4 sections render — Organizations (6), Trust Leaderboard (Elite/Trusted/Verified/Basic/Unverified tiers), Identity Verifications (11), Devices & Sessions (5 devices). Real org names visible (EPA, Minerals Commission, WACAM, KNUST, Forestry, Akuapem).
+  • Tab switching works both ways (Identity ↔ Foundation).
+  • Foundation tab: System Health, Subsystem Architecture, Milestones Checklist (with M2 items) all render.
+  • KPIs: 6 orgs, 5 members, 5 devices, 11 verifications, 1 elite, 2 pending.
+  • Responsive: no horizontal scroll at 390px mobile.
+  • No console errors. Footer shows "M2 — Identity & Trust".
+  • All API endpoints: 6 public (200), auth-gated (401).
+
+Stage Summary:
+- Milestone 2 (Identity & Trust Platform) is COMPLETE and browser-verified.
+- Delivered: Organizations (Government Agencies, NGOs, Researchers, Regulators, Communities), Members & Invitations, Identity Verification workflow (submit→review→approve/reject), Trust Profiles (score + tier + badges with recalculation engine), Device Management (register/trust/revoke with fingerprinting), Session Management (list/revoke), Role Switching (with org-context validation + history logging).
+- 2 new RBAC roles (inspector, moderator) + 13 new permissions integrated into the existing RBAC catalogue.
+- 18 new API routes, all versioned under /api/v1/ with RBAC enforcement.
+- Identity bounded context follows the same DDD + EDA patterns as M1 (aggregate roots, domain events, transactional outbox, audit handler auto-records all identity events).
+- Future milestones (M3 Intelligence, M4 Digital Twin, M5 Community) plug into this trust layer: reports submitted by verified users carry their trust score, org-scoped actions use the role-switch context, device trust gates sensitive operations.

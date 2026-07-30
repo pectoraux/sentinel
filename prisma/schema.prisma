@@ -46,6 +46,15 @@ model User {
   auditLogs     AuditLog[]
   createdFlags  FeatureFlag[]  @relation("FlagCreatedBy")
   updatedFlags  FeatureFlag[]  @relation("FlagUpdatedBy")
+  orgMemberships OrganizationMember[]
+  orgVerifiedBy  Organization[]  @relation("OrgVerifiedBy")
+  devices        Device[]
+  verifications  IdentityVerification[]
+  trustProfile   TrustProfile?
+  trustEvents    TrustEvent[]
+  roleSwitches   RoleSwitchLog[]
+  activeRole     ActiveRole?
+  invitedOrgs    OrganizationInvitation[]  @relation("InvitedBy")
 
   @@index([status])
   @@index([email])
@@ -311,4 +320,210 @@ model HealthCheckResult {
   checkedAt   DateTime @default(now())
 
   @@index([checkName, checkedAt])
+}
+
+// =============================================================================
+// MILESTONE 2 — Identity & Trust Platform
+// =============================================================================
+// Organizations (Government Agencies, NGOs, Researchers), members, invitations,
+// device management, identity verification, trust profiles, role switching,
+// active session management. All designed to extend M1 foundations.
+// =============================================================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  key         String   @unique // slug, e.g. "galamsey-task-force"
+  name        String
+  type        String   // government_agency | ngo | researcher | regulator | community
+  country     String?  // ISO country code e.g. "GH"
+  region      String?
+  description String?
+  logoUrl     String?
+  // status: active | suspended | dissolved | pending_verification
+  status      String   @default("pending_verification")
+  verifiedAt  DateTime?
+  verifiedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     OrganizationMember[]
+  invitations OrganizationInvitation[]
+  verifier    User? @relation("OrgVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  devices     Device[]
+  verifications IdentityVerification[]
+
+  @@index([type])
+  @@index([status])
+  @@index([country])
+}
+
+model OrganizationMember {
+  id            String   @id @default(cuid())
+  organizationId String
+  userId        String
+  // role within the org: owner | admin | member | inspector | moderator | observer
+  role          String   @default("member")
+  // the org role that becomes "active" when the user switches into this org context
+  joinedAt      DateTime @default(now())
+  invitedBy     String?
+  status        String   @default("active") // active | revoked | pending
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model OrganizationInvitation {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String
+  role           String   @default("member")
+  token          String   @unique
+  invitedById    String
+  // status: pending | accepted | declined | expired | revoked
+  status         String   @default("pending")
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedById   String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User          @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+}
+
+model Device {
+  id            String   @id @default(cuid())
+  userId        String
+  organizationId String?
+  fingerprint   String   @unique // stable device fingerprint (UA + screen + tz hash)
+  label         String?  // user-provided name e.g. "MacBook Pro"
+  platform      String?  // ios | android | macos | windows | linux | web
+  userAgent     String?
+  // status: trusted | active | unverified | revoked | lost
+  status        String   @default("unverified")
+  lastSeenAt    DateTime @default(now())
+  lastSeenIp    String?
+  location      String?  // coarse geo: city, country
+  trustedAt     DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  createdAt     DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+model IdentityVerification {
+  id              String   @id @default(cuid())
+  userId          String
+  organizationId  String?
+  // type: government_id | passport | phone_otp | email | address | biometric | organization_docs
+  type            String
+  // status: pending | under_review | approved | rejected | expired
+  status          String   @default("pending")
+  // documentReference: storage key of the uploaded evidence (StoredObject.key)
+  documentReference String?
+  // submitted data payload (JSON): document number (redacted), country, etc.
+  submittedData   String?
+  // reviewer notes / rejection reason
+  reviewerNotes   String?
+  reviewedById    String?
+  submittedAt     DateTime @default(now())
+  reviewedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([type])
+}
+
+model TrustProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  // 0-100 trust score; computed from verifications, activity, reports, disputes
+  score           Int      @default(0)
+  tier            String   @default("unverified") // unverified | basic | verified | trusted | elite
+  // contributing factors (JSON): { verifications: n, reportsSubmitted: n, reportsVerified: n, disputes: n }
+  factors         String?
+  // badges (JSON array): ["id_verified", "org_member", "top_reporter", "early_adopter"]
+  badges          String?
+  lastRecalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([score])
+  @@index([tier])
+}
+
+model TrustEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  // type: verification_approved | report_verified | report_rejected | dispute_filed | org_joined | badge_earned | penalty
+  type        String
+  delta       Int      // score change (+5, -10)
+  reason      String?
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model RoleSwitchLog {
+  id          String   @id @default(cuid())
+  userId      String
+  // fromRole / toRole: the RBAC role key the user switched between
+  fromRole    String?
+  toRole      String
+  // contextType: global | organization ; contextId: org id if organization
+  contextType String   @default("global")
+  contextId   String?
+  reason      String?
+  ip          String?
+  switchedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([switchedAt])
+}
+
+// Track the user's currently-active role context (for role switching).
+// Stored separately so the user can have multiple sessions with different
+// active roles without affecting other sessions.
+model ActiveRole {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  roleKey     String   // current active RBAC role
+  contextType String   @default("global") // global | organization
+  contextId   String?  // organization id when contextType=organization
+  setAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
