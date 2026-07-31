@@ -9,7 +9,7 @@ const API_VERSION = process.env.NEXT_PUBLIC_API_VERSION ?? "v1";
 const NODE_ENV = process.env.NODE_ENV ?? "development";
 const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET;
 
-// Public paths - no auth required
+// Public paths
 const PUBLIC_PATHS: Array<RegExp> = [
   /^\/$/,
   /^\/auth(\/.*)?$/,
@@ -26,7 +26,11 @@ const PUBLIC_PATHS: Array<RegExp> = [
   /^\/api\/v1\/dev\/sdk\/?$/,
   /^\/api\/v1\/dev\/integrations\/?$/,
   /^\/api\/v1\/dev\/docs\/?$/,
+  /^\/api\/v1\/dev\/graphql\/?$/,
   /^\/api\/v1\/government\/dashboard\/?$/,
+  /^\/api\/v1\/government\/investigations\/?$/,
+  /^\/api\/v1\/government\/inspections\/?$/,
+  /^\/api\/v1\/government\/cases\/?$/,
   /^\/api\/v1\/analytics\/dashboard\/?$/,
   /^\/api\/v1\/analytics\/category\/?$/,
   /^\/api\/v1\/security\/posture\/?$/,
@@ -47,15 +51,33 @@ const PUBLIC_PATHS: Array<RegExp> = [
   /^\/api\/v1\/production\/accessibility\/?$/,
   /^\/api\/v1\/production\/i18n\/?$/,
   /^\/api\/v1\/production\/deployments\/?$/,
-  /^\/api\/v1\/government\/investigations\/?$/,
-  /^\/api\/v1\/government\/inspections\/?$/,
-  /^\/api\/v1\/government\/cases\/?$/,
   /^\/api\/v1\/fraud\/alerts\/?$/,
   /^\/api\/v1\/autonomous\/investigations\/?$/,
   /^\/api\/v1\/simulations\/scenarios\/?$/,
   /^\/api\/v1\/simulations\/compare\/?$/,
   /^\/api\/v1\/rewards\/pools\/?$/,
   /^\/api\/v1\/rewards\/ledger\/?$/,
+  /^\/api\/v1\/evidence\/?$/,
+  /^\/api\/v1\/evidence\/[^/]+\/?$/,
+  /^\/api\/v1\/evidence\/[^/]+\/versions\/?$/,
+  /^\/api\/v1\/evidence\/[^/]+\/confidence\/?$/,
+  /^\/api\/v1\/evidence\/corroboration-summary\/?$/,
+  /^\/api\/v1\/evidence\/duplicates\/?$/,
+  /^\/api\/v1\/ai-observations\/?$/,
+  /^\/api\/v1\/ai-observations\/summary\/?$/,
+  /^\/api\/v1\/ai-observations\/[^/]+\/?$/,
+  /^\/api\/v1\/fusion\/?$/,
+  /^\/api\/v1\/fusion\/[^/]+\/?$/,
+  /^\/api\/v1\/predictions\/?$/,
+  /^\/api\/v1\/hotspots\/?$/,
+  /^\/api\/v1\/hotspots\/[^/]+\/?$/,
+  /^\/api\/v1\/satellite\/scenes\/?$/,
+  /^\/api\/v1\/cv\/?$/,
+  /^\/api\/v1\/intelligence\/events\/?$/,
+  /^\/api\/v1\/trust\/?$/,
+  /^\/api\/v1\/notifications\/?$/,
+  /^\/api\/v1\/missions\/?$/,
+  /^\/api\/v1\/missions\/[^/]+\/?$/,
   /^\/sentinel-logo\.png\/?$/,
   /^\/favicon\.ico\/?$/,
   /^\/_next(\/.*)?$/,
@@ -97,7 +119,6 @@ export async function middleware(request: NextRequest) {
     response.headers.set("Link", `</api/${API_VERSION}/health>; rel="successor-version"`);
   }
 
-  // Set demo cookie if requested
   const query = request.nextUrl.searchParams.get("demo");
   if (query && TRUTHY.has(query.toLowerCase())) {
     response.cookies.set("demo", "true", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", httpOnly: false, secure: NODE_ENV === "production" });
@@ -107,7 +128,6 @@ export async function middleware(request: NextRequest) {
   if (isPublicPath(pathname)) return response;
   if (hasDemoBypass(request)) return response;
 
-  // Real auth check
   let authenticated = false;
   if (NEXTAUTH_SECRET) {
     try {
@@ -117,7 +137,6 @@ export async function middleware(request: NextRequest) {
   }
   if (authenticated) return response;
 
-  // Unauthenticated
   const signInUrl = new URL("/auth/signin", request.url);
   signInUrl.searchParams.set("callbackUrl", request.url);
   if (pathname.startsWith("/api/")) {
