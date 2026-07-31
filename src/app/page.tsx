@@ -1,7 +1,6 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  ShieldCheck,
   Activity,
   Boxes,
   KeyRound,
@@ -25,7 +24,7 @@ import {
   Smartphone,
 } from "lucide-react";
 
-import { config, safeConfigSnapshot } from "@/config";
+import { safeConfigSnapshot } from "@/config";
 import { getHealthService } from "@/infrastructure/health";
 import { getFeatureFlagService } from "@/modules/feature-flags";
 import { getAuditService } from "@/modules/audit";
@@ -38,7 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { FeatureFlagsPanel } from "@/components/sentinel/feature-flags-panel";
 import { HealthLiveView } from "@/components/sentinel/health-live-view";
-import { DashboardTabs } from "@/components/sentinel/dashboard-tabs";
+import { AppShell } from "@/components/sentinel/app-shell";
 import { IdentityDashboard } from "@/components/sentinel/identity-dashboard";
 import { GeospatialDashboard } from "@/components/sentinel/geo/geospatial-dashboard";
 import { TwinDashboard } from "@/components/sentinel/twin/twin-dashboard";
@@ -242,68 +241,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden bg-primary/10">
-              <img src="/sentinel-logo.png" alt="Sentinel" className="h-9 w-9 object-contain" />
-            </div>
-            <div className="leading-tight">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
-                <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M28 · Production Readiness
-                </Badge>
-              </div>
-              <p className="text-[11px] text-muted-foreground hidden sm:block">
-                Community Intelligence &amp; Digital Twin Platform
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
-              {config.NODE_ENV}
-            </Badge>
-            <Badge variant="outline" className="text-[10px] font-mono">
-              v{config.NEXT_PUBLIC_APP_VERSION}
-            </Badge>
-            <Badge variant="outline" className="text-[10px] font-mono">
-              API {config.NEXT_PUBLIC_API_VERSION}
-            </Badge>
-          </div>
-        </div>
-      </header>
-
-      {/* Main */}
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 sm:py-8">
-        {/* Hero */}
-        <section className="mb-8">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Production Readiness
-              </h2>
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Final production readiness across 8 domains: accessibility (WCAG 2.1 AA),
-                internationalization (5 languages), offline-first PWA, mobile optimization,
-                monitoring with SLO tracking, incident response with MTTR, operational
-                runbooks, and final go/no-go audit. Deployment automation with CI/CD.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                Live
-              </span>
-              <span>·</span>
-              <span>auto-refresh 30s</span>
-            </div>
-          </div>
-        </section>
-
-        <DashboardTabs>
+    <AppShell>
           {/* === M28: Production Readiness (first child = first tab, default) === */}
           <ProductionDashboard initialSummary={productionSummary} />
 
@@ -715,41 +653,7 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-        </DashboardTabs>
-      </main>
-
-      {/* Footer */}
-      <footer className="mt-auto border-t border-border bg-card/30">
-        <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M28 — Production Readiness</span>
-          </div>
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
-            <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
-            <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
-            <Link href="/api/v1/production/summary" className="hover:text-foreground transition-colors">Prod</Link>
-            <Link href="/api/v1/performance/summary" className="hover:text-foreground transition-colors">Perf</Link>
-            <Link href="/api/v1/security/summary" className="hover:text-foreground transition-colors">Security</Link>
-            <Link href="/api/v1/dev/summary" className="hover:text-foreground transition-colors">Dev</Link>
-            <Link href="/api/v1/analytics/summary" className="hover:text-foreground transition-colors">Analytics</Link>
-            <Link href="/api/v1/simulations/summary" className="hover:text-foreground transition-colors">Sim</Link>
-            <Link href="/api/v1/government/summary" className="hover:text-foreground transition-colors">Govt</Link>
-            <Link href="/api/v1/fraud/summary" className="hover:text-foreground transition-colors">Fraud</Link>
-            <Link href="/api/v1/rewards/summary" className="hover:text-foreground transition-colors">Rewards</Link>
-            <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
-            <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
-            <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>
-            <Link href="/api/v1/twin/temporal/summary" className="hover:text-foreground transition-colors">Temporal</Link>
-            <Link href="/api/v1/twin/summary" className="hover:text-foreground transition-colors">Twin</Link>
-            <Link href="/api/v1/geo/summary" className="hover:text-foreground transition-colors">Geo</Link>
-            <Link href="/api/v1/identity-summary" className="hover:text-foreground transition-colors">Identity</Link>
-            <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Secrets redacted</span>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </AppShell>
   );
 }
 
