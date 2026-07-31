@@ -308,3 +308,11 @@ export const ROLE_ACCENT_CLASSES: Record<RoleAccent, { bg: string; text: string;
   violet: { bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-400", ring: "ring-violet-500/20", border: "border-violet-500/30", gradient: "from-violet-500 to-purple-600" },
   amber: { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", ring: "ring-amber-500/20", border: "border-amber-500/30", gradient: "from-amber-500 to-orange-600" },
 };
+
+export const BADGE_TONE_CLASSES: Record<BadgeTone, string> = {
+  default: "bg-primary/10 text-primary border-primary/20",
+  success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  destructive: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+  outline: "border-border text-muted-foreground",
+};
