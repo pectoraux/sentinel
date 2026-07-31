@@ -1329,3 +1329,50 @@ model AIObservation {
   @@index([intelligenceEventId])
   @@index([createdAt])
 }
+
+model FusionSource {
+  id              String   @id @default(cuid())
+  fusionResultId  String
+  sourceType      String
+  sourceId        String?
+  rawConfidence   Float
+  weight          Float
+  weightedScore   Float
+  description     String?
+  sourceTimestamp DateTime?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  fusionResult    FusionResult @relation(fields: [fusionResultId], references: [id], onDelete: Cascade)
+
+  @@index([fusionResultId])
+  @@index([sourceType])
+}
+
+model FusionResult {
+  id              String   @id @default(cuid())
+  targetType      String
+  targetId        String?
+  fusedConfidence Float    @default(0)
+  fusedSeverity   String   @default("medium")
+  sourceCount     Int      @default(0)
+  sourceBreakdown String
+  hasConflict     Boolean  @default(false)
+  conflictDetails String?
+  consensusLevel  String   @default("unanimous")
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  intelligenceEventId String?
+  algorithm       String   @default("weighted_bayesian")
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  sources         FusionSource[]
+
+  @@index([targetType])
+  @@index([fusedConfidence])
+  @@index([hasConflict])
+  @@index([consensusLevel])
+  @@index([createdAt])
+}

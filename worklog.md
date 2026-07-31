@@ -569,3 +569,24 @@ Stage Summary:
 - Milestone 14 (AI Observation Engine) is COMPLETE and browser-verified.
 - Delivered: AI creates Intelligence Events from CV detection results. Each observation stores: Evidence (linked detection results with VLM provenance), Confidence (from VLM, trend-adjusted), Reasoning (6-step AI chain-of-thought: Vision Analysis → Observation → Severity → Impact Area → Historical Comparison → Conclusion), Affected Entities (twin entities mapped via Knowledge Graph), Historical Comparison (trend analysis: new/increasing/decreasing/stable with change percentage). All 19 observations linked to M8 Intelligence Events with event-sourced stream entries.
 - Integrates: M13 Computer Vision (detection results as source), M8 Community Intelligence (creates events with event sourcing), M6 Knowledge Graph (affected entity mapping), M4 Digital Twin (entity impact), M5 Temporal Engine (historical comparison over time).
+
+---
+Task ID: M15
+Agent: orchestrator
+Task: Milestone 15 — Evidence Fusion Engine
+
+Work Log:
+- Extended Prisma schema with 2 models: FusionResult (targetType/targetId/fusedConfidence/fusedSeverity/sourceCount/sourceBreakdown/hasConflict/conflictDetails/consensusLevel/lat/lng/locationName/intelligenceEventId/algorithm) and FusionSource (fusionResultId/sourceType/sourceId/rawConfidence/weight/weightedScore/description/sourceTimestamp/metadata).
+- Built fusion domain (fusion-types.ts): 6 source types (ai_detection weight=0.25 reliability=0.85, citizen_report weight=0.15 reliability=0.60, satellite_imagery weight=0.20 reliability=0.90, drone_survey weight=0.15 reliability=0.85, sensor_log weight=0.10 reliability=0.95, government_inspection weight=0.10 reliability=0.98) + corroboration (weight=0.05 reliability=0.75). 5 consensus levels (unanimous ≥95%, strong ≥80%, moderate ≥65%, weak ≥50%, divided <50%). fuse() function implements weighted Bayesian fusion: fusedConfidence = Σ(rawConfidence × weight × reliability) / Σ(weight × reliability). Conflict detection when source spread > 0.4.
+- Built FusionService: fuseForEvent() gathers evidence from M13 AI detections (via M14 observations), M8 citizen reports, M12 satellite scenes (nearby), M7 evidence via M8 comments (drone/sensor/government documents), M9 corroboration count → runs fuse() → persists FusionResult + FusionSources. fuseAll() batch processes all events. list(), getById(), summary().
+- Built 3 API routes: fusion/summary, fusion (GET list, POST fuse for event or batch), fusion/[id].
+- Seeded 24 fusion results from all intelligence events — 54 total sources across 6 types. Results: 83% average fused confidence, 0 conflicts, consensus distribution: 4 unanimous, 1 strong, 1 moderate, 18 weak. Source breakdown: AI Detection=19 (94% avg conf), Citizen Report=24 (60%), Satellite Imagery=8 (91%), Drone Survey=1 (65%), Gov Inspection=1 (98%), Corroboration=1 (80%).
+- UI: Built FusionDashboard with 8 KPIs, Fused Confidence Rankings (24 results with source dots, consensus level, conflict badges, severity), Source Breakdown panel (individual sources with raw confidence, weight, weighted score, weighted Bayesian visualization), Sources by Type distribution chart, Fusion Algorithm explanation (7 source types with weight + reliability bars, formula display).
+- Updated DashboardTabs to 15 tabs (Evidence Fusion default). Updated hero, header badge, footer, checklist.
+- `bun run lint` → 0 errors. `bun run test` → 60/60 pass.
+- Agent Browser: Evidence Fusion tab (default) renders all sections. 15 tabs switch correctly. Summary: 24 fusions, 83% avg confidence, 54 sources across 6 types, 0 conflicts, 4 unanimous consensus. No errors.
+
+Stage Summary:
+- Milestone 15 (Evidence Fusion Engine) is COMPLETE and browser-verified.
+- Delivered: Weighted Bayesian fusion merges 6 evidence source types (AI, Citizens, Satellite, Drone, Sensors, Government inspections) into one confidence score. Formula: fusedConfidence = Σ(rawConfidence × weight × reliability) / Σ(weight × reliability). Each source type has a base weight and reliability score — government inspections (98% reliable) and satellite imagery (90%) have more influence than citizen reports (60%). Conflict detection flags when sources disagree by >40%. Consensus levels (unanimous/strong/moderate/weak/divided) show how aligned the sources are.
+- Integrates ALL prior milestones: M13/M14 AI detections, M8 citizen reports, M12 satellite scenes, M7 evidence (drone/sensor/government), M9 corroboration.

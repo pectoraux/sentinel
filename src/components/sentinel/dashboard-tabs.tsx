@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "fusion", label: "Evidence Fusion", icon: Layers, description: "M15 · Merge AI + Citizens + Satellite + Drone + Sensors + Government into one confidence score", short: "M15" },
   { id: "observations", label: "AI Observations", icon: Brain, description: "M14 · AI creates Intelligence Events · Evidence · Confidence · Reasoning · Affected entities · Historical comparison", short: "M14" },
   { id: "cv", label: "Computer Vision", icon: Eye, description: "M13 · Real AI · VLM detection · Excavation · Roads · Tailings · Forest loss · Water · Buildings · Equipment", short: "M13" },
   { id: "satellite", label: "Satellite Ingestion", icon: Satellite, description: "M12 · Sentinel · Landsat · Raster pipeline · Tiling · Caching · Archive · Scheduling", short: "M12" },
@@ -30,23 +31,24 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("observations");
+  const [active, setActive] = React.useState<string>("fusion");
 
   const childrenArray = React.Children.toArray(children);
-  const observations = childrenArray[0] ?? null;
-  const cv = childrenArray[1] ?? null;
-  const satellite = childrenArray[2] ?? null;
-  const notifications = childrenArray[3] ?? null;
-  const trust = childrenArray[4] ?? null;
-  const corroboration = childrenArray[5] ?? null;
-  const intel = childrenArray[6] ?? null;
-  const evidence = childrenArray[7] ?? null;
-  const kg = childrenArray[8] ?? null;
-  const temporal = childrenArray[9] ?? null;
-  const twin = childrenArray[10] ?? null;
-  const geo = childrenArray[11] ?? null;
-  const identity = childrenArray[12] ?? null;
-  const foundation = childrenArray[13] ?? null;
+  const fusion = childrenArray[0] ?? null;
+  const observations = childrenArray[1] ?? null;
+  const cv = childrenArray[2] ?? null;
+  const satellite = childrenArray[3] ?? null;
+  const notifications = childrenArray[4] ?? null;
+  const trust = childrenArray[5] ?? null;
+  const corroboration = childrenArray[6] ?? null;
+  const intel = childrenArray[7] ?? null;
+  const evidence = childrenArray[8] ?? null;
+  const kg = childrenArray[9] ?? null;
+  const temporal = childrenArray[10] ?? null;
+  const twin = childrenArray[11] ?? null;
+  const geo = childrenArray[12] ?? null;
+  const identity = childrenArray[13] ?? null;
+  const foundation = childrenArray[14] ?? null;
 
   return (
     <div>
@@ -83,6 +85,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "fusion" && fusion}
         {active === "observations" && observations}
         {active === "cv" && cv}
         {active === "satellite" && satellite}

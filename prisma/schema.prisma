@@ -1565,3 +1565,74 @@ model AIObservation {
   @@index([intelligenceEventId])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 15 — Evidence Fusion Engine
+// =============================================================================
+// Merges evidence from multiple sources (AI, Citizens, Satellite, Drone,
+// Sensors, Government inspections) into one fused confidence score.
+// Uses weighted Bayesian fusion with conflict detection.
+// =============================================================================
+
+model FusionSource {
+  id              String   @id @default(cuid())
+  fusionResultId  String
+  // sourceType: ai_detection | citizen_report | satellite_imagery | drone_survey | sensor_log | government_inspection | corroboration
+  sourceType      String
+  // sourceId: reference to the source record (detection result ID, evidence ID, intel event ID, etc.)
+  sourceId        String?
+  // raw confidence from this source (0.0-1.0)
+  rawConfidence   Float
+  // weight assigned to this source type (0.0-1.0, based on source reliability)
+  weight          Float
+  // weighted contribution to the fused score
+  weightedScore   Float
+  // metadata
+  description     String?
+  sourceTimestamp DateTime?
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  fusionResult    FusionResult @relation(fields: [fusionResultId], references: [id], onDelete: Cascade)
+
+  @@index([fusionResultId])
+  @@index([sourceType])
+}
+
+model FusionResult {
+  id              String   @id @default(cuid())
+  // target: what is being fused (e.g. an intelligence event, a twin entity, a location)
+  targetType      String   // intelligence_event | twin_entity | location | observation
+  targetId        String?
+  // the fused confidence (0.0-1.0) — the single number from merging all sources
+  fusedConfidence Float    @default(0)
+  // fused severity
+  fusedSeverity   String   @default("medium") // low | medium | high | critical
+  // number of sources fused
+  sourceCount     Int      @default(0)
+  // source breakdown
+  sourceBreakdown String   // JSON: { ai: n, citizen: n, satellite: n, drone: n, sensor: n, government: n }
+  // conflict detection
+  hasConflict     Boolean  @default(false)
+  conflictDetails String?  // JSON: { sources: [...], spread: number, description: string }
+  // consensus
+  consensusLevel  String   @default("unanimous") // unanimous | strong | moderate | weak | divided
+  // location (optional — for spatial fusion)
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  // linked intelligence event
+  intelligenceEventId String?
+  // metadata
+  algorithm       String   @default("weighted_bayesian")
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  sources         FusionSource[]
+
+  @@index([targetType])
+  @@index([fusedConfidence])
+  @@index([hasConflict])
+  @@index([consensusLevel])
+  @@index([createdAt])
+}
