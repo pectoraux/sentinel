@@ -2470,3 +2470,102 @@ model CaseEvent {
   @@index([eventType])
   @@index([eventDate])
 }
+
+// =============================================================================
+// MILESTONE 23 — Simulation Engine ("What if…?")
+// =============================================================================
+// Policy/operational simulation engine. Users pose "What if?" questions:
+//   "What if we increase inspections by 50%?"
+//   "What if we protect the Pra River watershed?"
+//   "What if we close the access roads to Prestea?"
+//   "What if we deploy drones over the Atewa Forest?"
+//
+// Each scenario combines 1+ interventions with parameters (intensity, duration,
+// geographic scope). The engine predicts outcomes across 5 dimensions:
+//   1. illegal_mining_rate  — % change in illegal mining activity
+//   2. water_quality        — % change in water quality index
+//   3. forest_cover         — hectares of forest saved/lost
+//   4. economic_impact      — GHS economic impact (damages avoided + enforcement cost)
+//   5. enforcement_cost     — GHS cost of implementing the intervention
+//
+// Scenarios can be compared side-by-side. Baseline scenarios track current
+// trajectory without intervention.
+// =============================================================================
+
+model SimulationScenario {
+  id              String   @id @default(cuid())
+  key             String   @unique // e.g. "sim-prestea-inspections-001"
+  name            String
+  description     String
+  // type: baseline | increase_inspections | protect_watershed | close_roads | deploy_drones | combined
+  type            String
+  // status: draft | running | completed | failed | archived
+  status          String   @default("completed")
+  // geographic scope
+  region          String?
+  district        String?
+  locationName    String?
+  lat             Float?
+  lng             Float?
+  radiusKm        Float?   // radius of the simulated area
+  // time horizon
+  timeHorizonMonths Int   @default(6) // 1, 3, 6, 12, 24 months
+  // is this a baseline (no intervention)?
+  isBaseline      Boolean  @default(false)
+  // parameters JSON: { interventionType: { intensity, duration, frequency, ... } }
+  parameters      String   // JSON
+  // outcomes JSON: the predicted outcomes (5 dimensions × time series)
+  outcomes        String?  // JSON
+  // summary metrics (extracted from outcomes for quick display)
+  illegalMiningRateChange Float @default(0) // % change (-100 to +100)
+  waterQualityChange      Float @default(0) // % change (-100 to +100)
+  forestCoverChangeHa     Float @default(0) // hectares (+ = saved, - = lost)
+  economicImpactGHS       Float @default(0) // GHS (damages avoided - enforcement cost)
+  enforcementCostGHS      Float @default(0) // GHS cost of intervention
+  netBenefitGHS           Float @default(0) // economicImpact - enforcementCost
+  // confidence: 0.0–1.0 — how confident the model is in the predictions
+  confidence     Float    @default(0.7)
+  // AI model
+  model          String   @default("sim-engine-v1")
+  algorithm      String   @default("intervention_impact_model")
+  // input data references (what real data was used)
+  inputInvestigationIds  String? // JSON array
+  inputInspectionIds     String? // JSON array
+  inputHotspotIds        String? // JSON array
+  inputPredictionIds     String? // JSON array
+  inputEntityIds         String? // JSON array
+  // explanation
+  explanation    String?  // human-readable explanation of the predicted outcomes
+  factorsBreakdown String? // JSON: { factor: { value, weight, contribution } }
+  // metadata
+  metadata       String?  // JSON
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([region])
+  @@index([isBaseline])
+  @@index([createdAt])
+  @@index([netBenefitGHS])
+}
+
+model SimulationComparison {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  // scenarios being compared (JSON array of scenario IDs)
+  scenarioIds     String   // JSON array
+  // comparison results
+  results         String?  // JSON: { metric: { scenarioId: value } }
+  // best scenario (highest net benefit)
+  bestScenarioId  String?
+  bestMetric      String?  // which metric determined the best (net_benefit | illegal_mining_reduction | water_quality_improvement)
+  // metadata
+  createdBy       String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -1998,3 +1998,67 @@ model CaseEvent {
   @@index([eventType])
   @@index([eventDate])
 }
+
+// =============================================================================
+// MILESTONE 23 — Simulation Engine ("What if…?")
+// =============================================================================
+model SimulationScenario {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String
+  type            String
+  status          String   @default("completed")
+  region          String?
+  district        String?
+  locationName    String?
+  lat             Float?
+  lng             Float?
+  radiusKm        Float?
+  timeHorizonMonths Int   @default(6)
+  isBaseline      Boolean  @default(false)
+  parameters      String
+  outcomes        String?
+  illegalMiningRateChange Float @default(0)
+  waterQualityChange      Float @default(0)
+  forestCoverChangeHa     Float @default(0)
+  economicImpactGHS       Float @default(0)
+  enforcementCostGHS      Float @default(0)
+  netBenefitGHS           Float @default(0)
+  confidence     Float    @default(0.7)
+  model          String   @default("sim-engine-v1")
+  algorithm      String   @default("intervention_impact_model")
+  inputInvestigationIds  String?
+  inputInspectionIds     String?
+  inputHotspotIds        String?
+  inputPredictionIds     String?
+  inputEntityIds         String?
+  explanation    String?
+  factorsBreakdown String?
+  metadata       String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([region])
+  @@index([isBaseline])
+  @@index([createdAt])
+  @@index([netBenefitGHS])
+}
+
+model SimulationComparison {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  scenarioIds     String
+  results         String?
+  bestScenarioId  String?
+  bestMetric      String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+}

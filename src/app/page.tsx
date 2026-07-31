@@ -60,6 +60,7 @@ import { MissionDashboard } from "@/components/sentinel/missions/mission-dashboa
 import { RewardDashboard } from "@/components/sentinel/rewards/reward-dashboard";
 import { FraudDashboard } from "@/components/sentinel/fraud/fraud-dashboard";
 import { GovernmentDashboard } from "@/components/sentinel/government/government-dashboard";
+import { SimulationDashboard } from "@/components/sentinel/simulation/simulation-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
@@ -77,6 +78,7 @@ import { getMissionService } from "@/modules/missions";
 import { getRewardService } from "@/modules/rewards";
 import { getFraudService } from "@/modules/fraud";
 import { getGovernmentService } from "@/modules/government";
+import { getSimulationService } from "@/modules/simulation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -114,6 +116,7 @@ export default async function DashboardPage() {
     rewardSummary,
     fraudSummary,
     governmentSummary,
+    simulationSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -145,6 +148,7 @@ export default async function DashboardPage() {
     getRewardService().summary(),
     getFraudService().summary(),
     getGovernmentService().summary(),
+    getSimulationService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -226,7 +230,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M22 · Gov Operations Center
+                  M23 · Simulation Engine
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -255,14 +259,14 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Government Operations Center
+                Simulation Engine
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Three-tier government dashboard (National → Regional → District) with
-                investigation workflow, inspection workflow, and case management.
-                Track illegal mining cases from initial report to prosecution, manage
-                field inspections with compliance assessment, and monitor enforcement
-                across all jurisdictions.
+                "What if?" scenario modeling for policy and operational interventions.
+                Increase inspections, protect watersheds, close roads, deploy drones —
+                the engine predicts outcomes across 5 dimensions: illegal mining rate,
+                water quality, forest cover, economic impact, and enforcement cost.
+                Compare scenarios to find the best intervention strategy.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -277,7 +281,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M22: Government Operations Center (first child = first tab, default) === */}
+          {/* === M23: Simulation Engine (first child = first tab, default) === */}
+          <SimulationDashboard initialSummary={simulationSummary} />
+
+          {/* === M22: Government Operations Center (second child = second tab) === */}
           <GovernmentDashboard initialSummary={governmentSummary} />
 
           {/* === M21: Fraud Detection AI (second child = second tab) === */}
@@ -627,7 +634,12 @@ export default async function DashboardPage() {
                     "M22: Investigation Workflow (9 steps)",
                     "M22: Inspection Workflow + Findings",
                     "M22: Case Management + Timeline Events",
-                    "M23: Predictive Analytics (next)",
+                    "M23: Simulation Engine (What if?)",
+                    "M23: Increase Inspections · Protect Watershed",
+                    "M23: Close Roads · Deploy Drones · Combined",
+                    "M23: 5 Outcome Dimensions (Mining · Water · Forest · Economic · Cost)",
+                    "M23: Scenario Comparison + ROI Ranking",
+                    "M24: Mobile App (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -646,12 +658,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M22 — Government Operations Center</span>
+            <span>Sentinel Platform · M23 — Simulation Engine</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/simulations/summary" className="hover:text-foreground transition-colors">Sim</Link>
             <Link href="/api/v1/government/summary" className="hover:text-foreground transition-colors">Govt</Link>
             <Link href="/api/v1/fraud/summary" className="hover:text-foreground transition-colors">Fraud</Link>
             <Link href="/api/v1/rewards/summary" className="hover:text-foreground transition-colors">Rewards</Link>

@@ -175,6 +175,9 @@ async function main() {
 
   console.log("[seed] Seeding M22 government operations center data...");
   await seedGovernmentData().catch((e) => console.log("[seed] M22 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding M23 simulation engine data...");
+  await seedSimulationData().catch((e) => console.log("[seed] M23 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -3234,6 +3237,208 @@ async function seedGovernmentData() {
   }
 
   console.log(`[seed] Seeded ${invCount} investigations (${stepCount} steps), ${inspCount} inspections (${findingCount} findings), ${caseCount} cases (${eventCount} events).`);
+}
+
+// ---------------------------------------------------------------------------
+// M23 — Simulation Engine seed data
+// ---------------------------------------------------------------------------
+// Creates baseline + intervention scenarios using the real prediction model.
+// References real hotspots, investigations, inspections, and predictions.
+// ---------------------------------------------------------------------------
+
+async function seedSimulationData() {
+  // Check if simulation data already exists
+  const existing = await prisma.simulationScenario.count();
+  if (existing > 0) {
+    console.log(`[seed] Simulation data already exists (${existing} scenarios) — skipping.`);
+    return;
+  }
+
+  // Import the prediction model
+  const { predictOutcomes, generateExplanation } = await import("../src/modules/simulation/domain/simulation-types");
+
+  // Get real platform data for baseline context
+  const [hotspots, investigations, inspections, envPredictions, twinEntities] = await Promise.all([
+    prisma.hotspotPrediction.findMany({ select: { id: true, type: true, locationName: true, probability: true, riskLevel: true }, take: 20 }),
+    prisma.investigation.findMany({ select: { id: true, type: true, region: true, estimatedImpactGHS: true }, take: 20 }),
+    prisma.inspection.findMany({ select: { id: true, type: true, region: true, complianceLevel: true }, take: 20 }),
+    prisma.environmentalPrediction.findMany({ select: { id: true, type: true, targetName: true, riskScore: true }, take: 20 }),
+    prisma.twinEntity.findMany({ select: { id: true, name: true, type: true }, take: 20 }),
+  ]);
+
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+
+  type ScenarioSeed = {
+    name: string;
+    description: string;
+    type: string;
+    interventionParams: Record<string, number>;
+    timeHorizonMonths: number;
+    region: string;
+    locationName: string;
+    lat: number;
+    lng: number;
+    isBaseline: boolean;
+  };
+
+  // Define 7 scenarios: 1 baseline + 4 single interventions + 2 combined
+  const scenariosData: ScenarioSeed[] = [
+    {
+      name: "Prestea Baseline — No Intervention",
+      description: "Current trajectory with no policy changes. Illegal mining continues at current rates.",
+      type: "baseline",
+      interventionParams: {},
+      timeHorizonMonths: 6,
+      region: "Western",
+      locationName: "Prestea Galamsey Complex",
+      lat: 5.4321, lng: -2.1456,
+      isBaseline: true,
+    },
+    {
+      name: "Prestea: Increase Inspections by 50%",
+      description: "What if we increase EPA inspection frequency by 50% and deploy 5 additional inspectors to the Prestea area?",
+      type: "increase_inspections",
+      interventionParams: { inspectionIncreasePct: 50, inspectorCount: 5 },
+      timeHorizonMonths: 6,
+      region: "Western",
+      locationName: "Prestea Galamsey Complex",
+      lat: 5.4321, lng: -2.1456,
+      isBaseline: false,
+    },
+    {
+      name: "Pra River: Protect Watershed (100m buffer, 5 rivers)",
+      description: "What if we establish 100m protected buffer zones along 5 rivers in the Pra River watershed?",
+      type: "protect_watershed",
+      interventionParams: { bufferZoneM: 100, riversProtected: 5 },
+      timeHorizonMonths: 6,
+      region: "Central",
+      locationName: "Pra River Watershed",
+      lat: 5.2767, lng: -1.8767,
+      isBaseline: false,
+    },
+    {
+      name: "Prestea: Close 5 Access Roads + 3 Checkpoints",
+      description: "What if we close the 5 main access roads to the Prestea galamsey sites and deploy 3 checkpoints?",
+      type: "close_roads",
+      interventionParams: { roadsClosed: 5, checkpointsDeployed: 3 },
+      timeHorizonMonths: 6,
+      region: "Western",
+      locationName: "Prestea Access Network",
+      lat: 5.4321, lng: -2.1456,
+      isBaseline: false,
+    },
+    {
+      name: "Atewa Forest: Deploy 3 Drones (100km² coverage)",
+      description: "What if we deploy 3 surveillance drones over the Atewa Forest Reserve with 100km² coverage, patrolling 3× per week?",
+      type: "deploy_drones",
+      interventionParams: { droneCount: 3, coverageAreaKm2: 100, patrolFrequencyPerWeek: 3 },
+      timeHorizonMonths: 6,
+      region: "Eastern",
+      locationName: "Atewa Forest Reserve",
+      lat: 6.1667, lng: -0.5500,
+      isBaseline: false,
+    },
+    {
+      name: "Prestea: Combined Intervention (All 4)",
+      description: "What if we combine all 4 interventions: +50% inspections, 5 rivers protected, 5 roads closed, 3 drones deployed?",
+      type: "combined",
+      interventionParams: { inspectionIncreasePct: 50, inspectorCount: 5, bufferZoneM: 100, riversProtected: 5, roadsClosed: 5, checkpointsDeployed: 3, droneCount: 3, coverageAreaKm2: 100, patrolFrequencyPerWeek: 3 },
+      timeHorizonMonths: 6,
+      region: "Western",
+      locationName: "Prestea — Full Intervention",
+      lat: 5.4321, lng: -2.1456,
+      isBaseline: false,
+    },
+    {
+      name: "Atewa Forest: Combined (Drones + Road Closures)",
+      description: "What if we combine drone surveillance with road closures around Atewa Forest Reserve?",
+      type: "combined",
+      interventionParams: { roadsClosed: 4, checkpointsDeployed: 2, droneCount: 4, coverageAreaKm2: 150, patrolFrequencyPerWeek: 4 },
+      timeHorizonMonths: 12,
+      region: "Eastern",
+      locationName: "Atewa Forest Reserve",
+      lat: 6.1667, lng: -0.5500,
+      isBaseline: false,
+    },
+  ];
+
+  let scenarioCount = 0;
+
+  for (const s of scenariosData) {
+    // Filter investigations/inspections by region for local context (hotspots don't have region)
+    const localHotspots = hotspots; // use all hotspots as spatial context
+    const localInvestigations = investigations.filter((i) => i.region === s.region || !i.region);
+    const localInspections = inspections.filter((i) => i.region === s.region || !i.region);
+
+    const hotspotCount = Math.max(localHotspots.length, 3); // ensure non-zero
+
+    // Predict outcomes using the real model
+    const prediction = predictOutcomes({
+      interventionType: s.type as any,
+      interventionParams: s.interventionParams,
+      timeHorizonMonths: s.timeHorizonMonths,
+      hotspotCount,
+      investigationCount: localInvestigations.length,
+      inspectionCount: localInspections.length,
+      region: s.region,
+    });
+
+    const explanation = generateExplanation({
+      interventionType: s.type as any,
+      timeHorizonMonths: s.timeHorizonMonths,
+      locationName: s.locationName,
+      metrics: prediction.metrics,
+    });
+
+    const key = `sim-${s.type}-${s.region.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${scenarioCount}`;
+
+    await prisma.simulationScenario.create({
+      data: {
+        key,
+        name: s.name,
+        description: s.description,
+        type: s.type,
+        status: "completed",
+        region: s.region,
+        locationName: s.locationName,
+        lat: s.lat,
+        lng: s.lng,
+        timeHorizonMonths: s.timeHorizonMonths,
+        isBaseline: s.isBaseline,
+        parameters: JSON.stringify(s.interventionParams),
+        outcomes: JSON.stringify(prediction.timeSeries),
+        illegalMiningRateChange: prediction.metrics.illegalMiningRateChange,
+        waterQualityChange: prediction.metrics.waterQualityChange,
+        forestCoverChangeHa: prediction.metrics.forestCoverChangeHa,
+        economicImpactGHS: prediction.metrics.economicImpactGHS,
+        enforcementCostGHS: prediction.metrics.enforcementCostGHS,
+        netBenefitGHS: prediction.metrics.netBenefitGHS,
+        confidence: 0.7 + Math.min(0.25, hotspotCount * 0.02),
+        model: "sim-engine-v1",
+        algorithm: "intervention_impact_model",
+        inputInvestigationIds: JSON.stringify(localInvestigations.map((i) => i.id)),
+        inputInspectionIds: JSON.stringify(localInspections.map((i) => i.id)),
+        inputHotspotIds: JSON.stringify(localHotspots.map((h) => h.id)),
+        inputPredictionIds: JSON.stringify(envPredictions.map((p) => p.id)),
+        inputEntityIds: JSON.stringify(twinEntities.map((e) => e.id)),
+        explanation,
+        factorsBreakdown: JSON.stringify(prediction.factorsBreakdown),
+        metadata: JSON.stringify({
+          hotspotCount,
+          investigationCount: localInvestigations.length,
+          inspectionCount: localInspections.length,
+          predictionCount: envPredictions.length,
+          entityCount: twinEntities.length,
+          createdBy: admin?.id,
+          seed: true,
+        }),
+        createdBy: admin?.id,
+      },
+    });
+    scenarioCount++;
+  }
+
+  console.log(`[seed] Seeded ${scenarioCount} simulation scenarios (1 baseline + 4 single interventions + 2 combined).`);
 }
 
 main()
