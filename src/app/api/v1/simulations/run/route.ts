@@ -30,21 +30,24 @@ export const POST = withHandler(async (req: NextRequest) => {
     return errorJson({ code: "invalid_request", message: `interventionType must be one of: ${validTypes.join(", ")}`, status: 400 });
   }
 
-  const result = await getSimulationService().runSimulation({
-    name: body.name ?? `${body.interventionType} scenario`,
-    description: body.description ?? "",
-    interventionType: body.interventionType as any,
-    interventionParams: body.interventionParams ?? {},
-    timeHorizonMonths: body.timeHorizonMonths,
-    region: body.region,
-    district: body.district,
-    locationName: body.locationName,
-    lat: body.lat,
-    lng: body.lng,
-    radiusKm: body.radiusKm,
-    isBaseline: body.isBaseline,
-    createdBy: body.createdBy,
-  });
-
-  return { status: 201, body: result };
+  try {
+    const result = await getSimulationService().runSimulation({
+      name: body.name ?? `${body.interventionType} scenario`,
+      description: body.description ?? "",
+      interventionType: body.interventionType as any,
+      interventionParams: body.interventionParams ?? {},
+      timeHorizonMonths: body.timeHorizonMonths,
+      region: body.region,
+      district: body.district,
+      locationName: body.locationName,
+      lat: body.lat,
+      lng: body.lng,
+      radiusKm: body.radiusKm,
+      isBaseline: body.isBaseline,
+      createdBy: body.createdBy,
+    });
+    return { status: 201, body: result };
+  } catch (e) {
+    return errorJson({ code: "simulation_failed", message: e instanceof Error ? e.message : "Unknown error", status: 500 });
+  }
 });
