@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark, FlaskConical, BarChart3, Code2, ShieldAlert, Gauge } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark, FlaskConical, BarChart3, Code2, ShieldAlert, Gauge, ClipboardCheck } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "production", label: "Production", icon: ClipboardCheck, description: "M28 · Accessibility · Internationalization · Offline-first · Mobile optimization · Monitoring · Incident response · Operational runbooks · Final production audit · Deployment automation", short: "M28" },
   { id: "performance", label: "Performance", icon: Gauge, description: "M27 · Millions of users · Millions of events · Petabyte imagery · Stress testing · Caching · Horizontal scaling · Load testing · Optimization", short: "M27" },
   { id: "security", label: "Security", icon: ShieldAlert, description: "M26 · Zero Trust · Encryption · Rate limiting · WAF · Secret rotation · Pen testing · Threat detection · Backups · Disaster recovery", short: "M26" },
   { id: "developer", label: "Developer", icon: Code2, description: "M25 · REST API · GraphQL · Webhooks · SDK · Documentation · Third-party integrations", short: "M25" },
@@ -43,36 +44,37 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("performance");
+  const [active, setActive] = React.useState<string>("production");
 
   const childrenArray = React.Children.toArray(children);
-  const performance = childrenArray[0] ?? null;
-  const security = childrenArray[1] ?? null;
-  const developer = childrenArray[2] ?? null;
-  const analytics = childrenArray[3] ?? null;
-  const simulation = childrenArray[4] ?? null;
-  const government = childrenArray[5] ?? null;
-  const fraud = childrenArray[6] ?? null;
-  const rewards = childrenArray[7] ?? null;
-  const missions = childrenArray[8] ?? null;
-  const copilot = childrenArray[9] ?? null;
-  const hotspots = childrenArray[10] ?? null;
-  const predictions = childrenArray[11] ?? null;
-  const fusion = childrenArray[12] ?? null;
-  const observations = childrenArray[13] ?? null;
-  const cv = childrenArray[14] ?? null;
-  const satellite = childrenArray[15] ?? null;
-  const notifications = childrenArray[16] ?? null;
-  const trust = childrenArray[17] ?? null;
-  const corroboration = childrenArray[18] ?? null;
-  const intel = childrenArray[19] ?? null;
-  const evidence = childrenArray[20] ?? null;
-  const kg = childrenArray[21] ?? null;
-  const temporal = childrenArray[22] ?? null;
-  const twin = childrenArray[23] ?? null;
-  const geo = childrenArray[24] ?? null;
-  const identity = childrenArray[25] ?? null;
-  const foundation = childrenArray[26] ?? null;
+  const production = childrenArray[0] ?? null;
+  const performance = childrenArray[1] ?? null;
+  const security = childrenArray[2] ?? null;
+  const developer = childrenArray[3] ?? null;
+  const analytics = childrenArray[4] ?? null;
+  const simulation = childrenArray[5] ?? null;
+  const government = childrenArray[6] ?? null;
+  const fraud = childrenArray[7] ?? null;
+  const rewards = childrenArray[8] ?? null;
+  const missions = childrenArray[9] ?? null;
+  const copilot = childrenArray[10] ?? null;
+  const hotspots = childrenArray[11] ?? null;
+  const predictions = childrenArray[12] ?? null;
+  const fusion = childrenArray[13] ?? null;
+  const observations = childrenArray[14] ?? null;
+  const cv = childrenArray[15] ?? null;
+  const satellite = childrenArray[16] ?? null;
+  const notifications = childrenArray[17] ?? null;
+  const trust = childrenArray[18] ?? null;
+  const corroboration = childrenArray[19] ?? null;
+  const intel = childrenArray[20] ?? null;
+  const evidence = childrenArray[21] ?? null;
+  const kg = childrenArray[22] ?? null;
+  const temporal = childrenArray[23] ?? null;
+  const twin = childrenArray[24] ?? null;
+  const geo = childrenArray[25] ?? null;
+  const identity = childrenArray[26] ?? null;
+  const foundation = childrenArray[27] ?? null;
 
   return (
     <div>
@@ -109,6 +111,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "production" && production}
         {active === "performance" && performance}
         {active === "security" && security}
         {active === "developer" && developer}

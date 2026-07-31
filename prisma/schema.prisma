@@ -3225,3 +3225,201 @@ model OptimizationRecord {
   @@index([impactLevel])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 28 — Production Readiness
+// =============================================================================
+// Final production readiness across 8 domains:
+//   1. Accessibility     — WCAG 2.1 AA compliance, screen reader, keyboard nav
+//   2. Internationalization — multi-language, RTL, locale-specific formatting
+//   3. Offline-First     — PWA, service worker, offline data sync
+//   4. Mobile Optimization — responsive, touch, performance on mobile
+//   5. Monitoring        — observability, alerting, dashboards, SLO tracking
+//   6. Incident Response — severity, on-call, postmortem, MTTR tracking
+//   7. Operational Runbooks — documented procedures for common operations
+//   8. Final Production Audit — comprehensive go/no-go checklist
+// =============================================================================
+
+model ProdReadinessCheck {
+  id              String   @id @default(cuid())
+  // domain: accessibility | i18n | offline | mobile | monitoring | incident_response | runbooks | audit
+  domain          String
+  // check name, e.g. "wcag_keyboard_nav", "pwa_service_worker"
+  checkName       String
+  description     String
+  // status: passed | warning | failed | pending | not_applicable
+  status          String   @default("pending")
+  // compliance level: A | AA | AAA | N/A
+  complianceLevel String?
+  // details
+  details         String?  // JSON
+  // remediation
+  remediation     String?
+  remediationOwner String?
+  remediationDueAt DateTime?
+  // metadata
+  metadata        String?  // JSON
+  checkedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([domain])
+  @@index([status])
+  @@index([complianceLevel])
+  @@index([checkedAt])
+}
+
+model IncidentReport {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // severity: SEV1 | SEV2 | SEV3 | SEV4 | SEV5
+  severity        String
+  // status: detected | investigating | mitigated | resolved | postmortem
+  status          String   @default("detected")
+  // impact
+  impactSummary   String?
+  affectedServices String? // JSON array
+  affectedUsers   Int      @default(0)
+  // timing
+  detectedAt      DateTime @default(now())
+  acknowledgedAt  DateTime?
+  mitigatedAt     DateTime?
+  resolvedAt      DateTime?
+  // MTTR (Mean Time To Resolution) in minutes
+  mttrMinutes     Int?
+  // on-call
+  oncallEngineer  String?
+  incidentCommander String?
+  // root cause
+  rootCause       String?
+  actionItems     String?  // JSON array
+  postmortemUrl   String?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([severity])
+  @@index([status])
+  @@index([detectedAt])
+  @@index([oncallEngineer])
+}
+
+model Runbook {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // category: deployment | scaling | recovery | security | data | monitoring | maintenance
+  category        String
+  // content (markdown)
+  content         String
+  // steps JSON array
+  steps           String?  // JSON: [{ step, action, expected, rollback }]
+  // metadata
+  estimatedTime   Int?     // minutes
+  lastTestedAt    DateTime?
+  lastUpdatedBy   String?
+  // status
+  status          String   @default("active") // active | draft | deprecated
+  version         Int      @default(1)
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([version])
+}
+
+model AccessibilityAudit {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // page/route audited
+  pageUrl         String
+  // WCAG level targeted: A | AA | AAA
+  targetLevel     String   @default("AA")
+  // results
+  totalChecks     Int      @default(0)
+  passedChecks    Int      @default(0)
+  failedChecks    Int      @default(0)
+  warningChecks   Int      @default(0)
+  // compliance score 0-100
+  complianceScore Float    @default(0)
+  achievedLevel   String?  // A | AA | AAA | none
+  // findings
+  findings        String?  // JSON array of detailed findings
+  // status
+  status          String   @default("completed") // scheduled | in_progress | completed
+  // metadata
+  auditedBy       String?
+  auditedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([pageUrl])
+  @@index([status])
+  @@index([achievedLevel])
+  @@index([complianceScore])
+}
+
+model I18nLocale {
+  id              String   @id @default(cuid())
+  // locale code, e.g. "en", "fr", "sw", "tw"
+  locale          String   @unique
+  language        String   // e.g. "English", "French", "Swahili", "Twi"
+  nativeName      String   // e.g. "English", "Français", "Kiswahili"
+  // direction: ltr | rtl
+  direction       String   @default("ltr")
+  // translation completeness 0-100
+  translationPct  Float    @default(0)
+  // status: active | draft | planned
+  status          String   @default("planned")
+  // stats
+  totalKeys       Int      @default(0)
+  translatedKeys  Int      @default(0)
+  missingKeys     Int      @default(0)
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([translationPct])
+}
+
+model DeploymentPipeline {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  // environment: staging | production | preview
+  environment     String
+  // status: idle | building | deploying | success | failed | rolled_back
+  status          String   @default("idle")
+  // version
+  version         String?
+  commitSha       String?
+  branch          String?
+  // stages JSON: [{ name, status, durationSec, logs }]
+  stages          String?  // JSON
+  // timing
+  triggeredAt     DateTime?
+  completedAt     DateTime?
+  durationSec     Int?
+  triggeredBy     String?
+  // result
+  deploymentUrl   String?
+  rollbackUrl     String?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([environment])
+  @@index([status])
+  @@index([createdAt])
+}

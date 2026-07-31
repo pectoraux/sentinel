@@ -2548,3 +2548,144 @@ model OptimizationRecord {
   @@index([impactLevel])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 28 — Production Readiness
+// =============================================================================
+model ProdReadinessCheck {
+  id              String   @id @default(cuid())
+  domain          String
+  checkName       String
+  description     String
+  status          String   @default("pending")
+  complianceLevel String?
+  details         String?
+  remediation     String?
+  remediationOwner String?
+  remediationDueAt DateTime?
+  metadata        String?
+  checkedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([domain])
+  @@index([status])
+  @@index([complianceLevel])
+}
+
+model IncidentReport {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  severity        String
+  status          String   @default("detected")
+  impactSummary   String?
+  affectedServices String?
+  affectedUsers   Int      @default(0)
+  detectedAt      DateTime @default(now())
+  acknowledgedAt  DateTime?
+  mitigatedAt     DateTime?
+  resolvedAt      DateTime?
+  mttrMinutes     Int?
+  oncallEngineer  String?
+  incidentCommander String?
+  rootCause       String?
+  actionItems     String?
+  postmortemUrl   String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([severity])
+  @@index([status])
+  @@index([detectedAt])
+}
+
+model Runbook {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  category        String
+  content         String
+  steps           String?
+  estimatedTime   Int?
+  lastTestedAt    DateTime?
+  lastUpdatedBy   String?
+  status          String   @default("active")
+  version         Int      @default(1)
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([status])
+}
+
+model AccessibilityAudit {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  pageUrl         String
+  targetLevel     String   @default("AA")
+  totalChecks     Int      @default(0)
+  passedChecks    Int      @default(0)
+  failedChecks    Int      @default(0)
+  warningChecks   Int      @default(0)
+  complianceScore Float    @default(0)
+  achievedLevel   String?
+  findings        String?
+  status          String   @default("completed")
+  auditedBy       String?
+  auditedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([pageUrl])
+  @@index([status])
+  @@index([achievedLevel])
+}
+
+model I18nLocale {
+  id              String   @id @default(cuid())
+  locale          String   @unique
+  language        String
+  nativeName      String
+  direction       String   @default("ltr")
+  translationPct  Float    @default(0)
+  status          String   @default("planned")
+  totalKeys       Int      @default(0)
+  translatedKeys  Int      @default(0)
+  missingKeys     Int      @default(0)
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([translationPct])
+}
+
+model DeploymentPipeline {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  environment     String
+  status          String   @default("idle")
+  version         String?
+  commitSha       String?
+  branch          String?
+  stages          String?
+  triggeredAt     DateTime?
+  completedAt     DateTime?
+  durationSec     Int?
+  triggeredBy     String?
+  deploymentUrl   String?
+  rollbackUrl     String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([environment])
+  @@index([status])
+}

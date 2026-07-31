@@ -65,6 +65,7 @@ import { AnalyticsDashboard } from "@/components/sentinel/analytics/analytics-da
 import { DeveloperDashboard } from "@/components/sentinel/developer/developer-dashboard";
 import { SecurityDashboard } from "@/components/sentinel/security/security-dashboard";
 import { PerformanceDashboard } from "@/components/sentinel/performance/performance-dashboard";
+import { ProductionDashboard } from "@/components/sentinel/production/production-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
@@ -87,6 +88,7 @@ import { getAnalyticsService } from "@/modules/analytics";
 import { getDeveloperService } from "@/modules/developer";
 import { getSecurityService } from "@/modules/security";
 import { getPerformanceService } from "@/modules/performance";
+import { getProductionService } from "@/modules/production";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -129,6 +131,7 @@ export default async function DashboardPage() {
     developerSummary,
     securitySummary,
     performanceSummary,
+    productionSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -165,6 +168,7 @@ export default async function DashboardPage() {
     getDeveloperService().summary(),
     getSecurityService().summary(),
     getPerformanceService().summary(),
+    getProductionService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -239,14 +243,14 @@ export default async function DashboardPage() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden bg-primary/10">
+              <img src="/sentinel-logo.png" alt="Sentinel" className="h-9 w-9 object-contain" />
             </div>
             <div className="leading-tight">
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M27 · Performance Hardening
+                  M28 · Production Readiness
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -275,13 +279,13 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Performance Hardening
+                Production Readiness
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Scales to millions of users, millions of events, and petabyte imagery.
-                6 performance domains: user capacity, event ingestion, imagery storage,
-                multi-layer caching (CDN + Redis), horizontal auto-scaling, and query
-                optimization. Stress/spike/soak load testing with latency tracking.
+                Final production readiness across 8 domains: accessibility (WCAG 2.1 AA),
+                internationalization (5 languages), offline-first PWA, mobile optimization,
+                monitoring with SLO tracking, incident response with MTTR, operational
+                runbooks, and final go/no-go audit. Deployment automation with CI/CD.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -296,7 +300,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M27: Performance Hardening (first child = first tab, default) === */}
+          {/* === M28: Production Readiness (first child = first tab, default) === */}
+          <ProductionDashboard initialSummary={productionSummary} />
+
+          {/* === M27: Performance Hardening (second child = second tab) === */}
           <PerformanceDashboard initialSummary={performanceSummary} />
 
           {/* === M26: Security Hardening (second child = second tab) === */}
@@ -685,7 +692,12 @@ export default async function DashboardPage() {
                     "M27: Stress · Spike · Soak · Ramp · Capacity Load Tests",
                     "M27: Multi-Layer Caching (CDN · Redis · App · DB · Browser)",
                     "M27: Horizontal Auto-Scaling · Query Optimization · N+1 Fixes",
-                    "M28: Production Launch (next)",
+                    "M28: Production Readiness (8 Domains)",
+                    "M28: Accessibility (WCAG 2.1 AA) · Internationalization (5 Languages)",
+                    "M28: Offline-First PWA · Mobile Optimization · Monitoring (SLO)",
+                    "M28: Incident Response (SEV1-5, MTTR) · Operational Runbooks",
+                    "M28: Final Production Audit · Deployment Automation (CI/CD)",
+                    "ALL 28 MILESTONES COMPLETE — PLATFORM READY FOR LAUNCH",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -704,12 +716,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M27 — Performance Hardening</span>
+            <span>Sentinel Platform · M28 — Production Readiness</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/production/summary" className="hover:text-foreground transition-colors">Prod</Link>
             <Link href="/api/v1/performance/summary" className="hover:text-foreground transition-colors">Perf</Link>
             <Link href="/api/v1/security/summary" className="hover:text-foreground transition-colors">Security</Link>
             <Link href="/api/v1/dev/summary" className="hover:text-foreground transition-colors">Dev</Link>

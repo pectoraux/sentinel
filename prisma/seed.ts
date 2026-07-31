@@ -187,6 +187,9 @@ async function main() {
 
   console.log("[seed] Seeding M27 performance hardening data...");
   await seedPerformanceData().catch((e) => console.log("[seed] M27 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding M28 production readiness data...");
+  await seedProductionData().catch((e) => console.log("[seed] M28 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -4482,6 +4485,114 @@ async function seedPerformanceData() {
   }
 
   console.log(`[seed] Seeded ${metricCount} performance metrics, ${loadTestCount} load tests, ${cacheCount} cache stats, ${scalingCount} scaling events, ${optimizationCount} optimization records.`);
+}
+
+// ---------------------------------------------------------------------------
+// M28 — Production Readiness seed data
+// ---------------------------------------------------------------------------
+
+async function seedProductionData() {
+  const existing = await prisma.prodReadinessCheck.count();
+  if (existing > 0) { console.log(`[seed] Production data already exists — skipping.`); return; }
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+  const now = new Date();
+  const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+  let checkCount = 0, incidentCount = 0, runbookCount = 0, auditCount = 0, localeCount = 0, deployCount = 0;
+
+  // === READINESS CHECKS — 32 (4 per domain × 8 domains) ===
+  const checks = [
+    // Accessibility
+    { domain: "accessibility", checkName: "wcag_keyboard_nav", description: "All interactive elements accessible via keyboard (Tab, Enter, Space, Escape)", status: "passed", complianceLevel: "AA", details: JSON.stringify({ testedPages: 28, issues: 0 }) },
+    { domain: "accessibility", checkName: "wcag_screen_reader", description: "Screen reader compatibility (NVDA, JAWS, VoiceOver) — ARIA labels, roles, landmarks", status: "passed", complianceLevel: "AA", details: JSON.stringify({ testedReaders: ["NVDA", "VoiceOver"], issues: 0 }) },
+    { domain: "accessibility", checkName: "wcag_color_contrast", description: "Color contrast ratio ≥4.5:1 for normal text, ≥3:1 for large text", status: "warning", complianceLevel: "AA", details: JSON.stringify({ failingElements: 3, note: "3 badges below 4.5:1 contrast" }), remediation: "Increase contrast on 3 badge components", remediationOwner: admin?.id, remediationDueAt: daysAgo(-7) },
+    { domain: "accessibility", checkName: "wcag_focus_visible", description: "Visible focus indicators on all interactive elements", status: "passed", complianceLevel: "AA" },
+    // i18n
+    { domain: "i18n", checkName: "i18n_locale_switching", description: "Users can switch language from any page; preference persisted", status: "passed", complianceLevel: "N/A" },
+    { domain: "i18n", checkName: "i18n_rtl_support", description: "RTL (right-to-left) layout support for Arabic/Hausa", status: "warning", complianceLevel: "N/A", remediation: "Add RTL CSS for Arabic locale", remediationDueAt: daysAgo(-14) },
+    { domain: "i18n", checkName: "i18n_date_number_format", description: "Locale-specific date, number, currency formatting", status: "passed", complianceLevel: "N/A" },
+    { domain: "i18n", checkName: "i18n_translation_coverage", description: "Translation coverage ≥80% for active locales", status: "passed", complianceLevel: "N/A", details: JSON.stringify({ en: 100, fr: 92, sw: 85, tw: 78 }) },
+    // Offline
+    { domain: "offline", checkName: "pwa_service_worker", description: "Service worker registered, caching app shell for offline access", status: "passed", complianceLevel: "N/A" },
+    { domain: "offline", checkName: "pwa_offline_data_sync", description: "Offline data sync — evidence/events queued and synced when online", status: "passed", complianceLevel: "N/A" },
+    { domain: "offline", checkName: "pwa_installable", description: "PWA installable (manifest.json, icons, standalone display)", status: "passed", complianceLevel: "N/A" },
+    { domain: "offline", checkName: "pwa_push_notifications", description: "Push notifications work offline (background sync)", status: "warning", complianceLevel: "N/A", remediation: "Add push notification support for offline evidence sync", remediationDueAt: daysAgo(-21) },
+    // Mobile
+    { domain: "mobile", checkName: "mobile_responsive", description: "Responsive design — works on 320px to 1920px screens", status: "passed", complianceLevel: "N/A" },
+    { domain: "mobile", checkName: "mobile_touch_targets", description: "Touch targets ≥44px (Apple HIG) / ≥48dp (Material)", status: "passed", complianceLevel: "N/A" },
+    { domain: "mobile", checkName: "mobile_performance", description: "Lighthouse mobile score ≥90 (LCP <2.5s, FID <100ms, CLS <0.1)", status: "warning", complianceLevel: "N/A", details: JSON.stringify({ score: 88, lcp: 2.1, fid: 120, cls: 0.05 }), remediation: "Optimize FID (120ms > 100ms target)" },
+    { domain: "mobile", checkName: "mobile_no_horizontal_scroll", description: "No horizontal scroll on mobile devices", status: "passed", complianceLevel: "N/A" },
+    // Monitoring
+    { domain: "monitoring", checkName: "monitor_uptime_tracking", description: "Uptime monitoring with 99.9% SLA target", status: "passed", complianceLevel: "N/A", details: JSON.stringify({ currentUptime: 99.97, sla: 99.9 }) },
+    { domain: "monitoring", checkName: "monitor_error_tracking", description: "Sentry error tracking with alerting on new errors", status: "passed", complianceLevel: "N/A" },
+    { domain: "monitoring", checkName: "monitor_slo_dashboard", description: "SLO/SLI dashboard with error budget tracking", status: "passed", complianceLevel: "N/A" },
+    { domain: "monitoring", checkName: "monitor_distributed_tracing", description: "OpenTelemetry distributed tracing across all services", status: "warning", complianceLevel: "N/A", remediation: "Add tracing to evidence upload pipeline", remediationDueAt: daysAgo(-10) },
+    // Incident Response
+    { domain: "incident_response", checkName: "ir_oncall_rotation", description: "24/7 on-call rotation with PagerDuty integration", status: "passed", complianceLevel: "N/A" },
+    { domain: "incident_response", checkName: "ir_severity_matrix", description: "SEV1-5 severity matrix documented and communicated", status: "passed", complianceLevel: "N/A" },
+    { domain: "incident_response", checkName: "ir_postmortem_process", description: "Blameless postmortem for all SEV1/SEV2 incidents within 48h", status: "passed", complianceLevel: "N/A" },
+    { domain: "incident_response", checkName: "ir_mttr_target", description: "MTTR target: SEV1 <1h, SEV2 <4h, SEV3 <24h", status: "warning", complianceLevel: "N/A", details: JSON.stringify({ currentAvgMttr: 52, target: 60, unit: "min" }), remediation: "Reduce SEV2 MTTR (currently 3.2h, target 4h — within target but trending up)" },
+    // Runbooks
+    { domain: "runbooks", checkName: "rb_deployment", description: "Deployment runbook with rollback procedures", status: "passed", complianceLevel: "N/A" },
+    { domain: "runbooks", checkName: "rb_database_recovery", description: "Database recovery runbook (restore from backup, failover)", status: "passed", complianceLevel: "N/A" },
+    { domain: "runbooks", checkName: "rb_scaling", description: "Auto-scaling runbook with threshold tuning", status: "passed", complianceLevel: "N/A" },
+    { domain: "runbooks", checkName: "rb_security_incident", description: "Security incident response runbook", status: "warning", complianceLevel: "N/A", remediation: "Update security runbook with M26 threat detection procedures", remediationDueAt: daysAgo(-5) },
+    // Audit
+    { domain: "audit", checkName: "audit_go_no_go", description: "Final go/no-go production launch checklist", status: "passed", complianceLevel: "N/A", details: JSON.stringify({ checklistItems: 50, passedItems: 47, warningItems: 3, failedItems: 0 }) },
+    { domain: "audit", checkName: "audit_performance_baseline", description: "Performance baseline established (p95 <100ms, 10K req/s)", status: "passed", complianceLevel: "N/A" },
+    { domain: "audit", checkName: "audit_security_scan", description: "Security scan passed (no critical/high vulnerabilities)", status: "passed", complianceLevel: "N/A" },
+    { domain: "audit", checkName: "audit_data_migration", description: "Data migration plan tested and verified", status: "warning", complianceLevel: "N/A", remediation: "Test migration with production-scale data (10M+ events)", remediationDueAt: daysAgo(-3) },
+  ];
+  for (const c of checks) { await prisma.prodReadinessCheck.create({ data: { ...c, checkedAt: hoursAgo(Math.random() * 48) } }); checkCount++; }
+
+  // === INCIDENTS — 4 ===
+  const incidents = [
+    { key: "inc-2024-001", title: "Evidence API 503 errors during traffic spike", description: "Evidence API returned 503 errors for 8 minutes during Atewa Forest investigation traffic spike (3x normal). Auto-scaling kicked in but took 45s.", severity: "SEV2", status: "resolved", impactSummary: "8% of evidence upload requests failed during 8-minute window", affectedServices: JSON.stringify(["api-server", "evidence-upload"]), affectedUsers: 3400, detectedAt: daysAgo(5), acknowledgedAt: daysAgo(5), mitigatedAt: daysAgo(5), resolvedAt: daysAgo(5), mttrMinutes: 42, oncallEngineer: "Kofi Mensah", incidentCommander: "Ama Boateng", rootCause: "Auto-scaling threshold too conservative (CPU 80%). Spike hit 92% before new nodes were ready.", actionItems: JSON.stringify(["Lower auto-scale threshold to 70%", "Pre-warm nodes during known events", "Add circuit breaker for evidence upload"]) },
+    { key: "inc-2024-002", title: "Database connection pool exhaustion", description: "Database connection pool exhausted during analytics dashboard batch query. 200 concurrent users affected.", severity: "SEV2", status: "resolved", detectedAt: daysAgo(12), acknowledgedAt: daysAgo(12), mitigatedAt: daysAgo(12), resolvedAt: daysAgo(12), mttrMinutes: 38, oncallEngineer: "Yaw Owusu", rootCause: "N+1 query in analytics summary triggered 200+ DB connections", actionItems: JSON.stringify(["Fix N+1 in analytics summary", "Increase connection pool to 200", "Add query timeout"]) },
+    { key: "inc-2024-003", title: "Satellite tile serving degraded performance", description: "Tile serving latency increased to 500ms (normal: 35ms) due to Redis cache miss storm after deploy", severity: "SEV3", status: "resolved", detectedAt: daysAgo(20), acknowledgedAt: daysAgo(20), mitigatedAt: daysAgo(20), resolvedAt: daysAgo(20), mttrMinutes: 65, oncallEngineer: "Akua Adjei", rootCause: "Deploy cleared Redis cache. Cold cache caused thundering herd.", actionItems: JSON.stringify(["Add cache warm-up after deploy", "Implement staggered cache refresh"]) },
+    { key: "inc-2024-004", title: "Copilot LLM API timeout", description: "AI Copilot responses timing out (30s) due to LLM provider rate limiting", severity: "SEV3", status: "mitigated", detectedAt: hoursAgo(3), acknowledgedAt: hoursAgo(3), mitigatedAt: hoursAgo(2), oncallEngineer: "Kofi Mensah", impactSummary: "Copilot queries taking 30s+ or timing out. 12 users affected." },
+  ];
+  for (const i of incidents) { await prisma.incidentReport.create({ data: i }); incidentCount++; }
+
+  // === RUNBOOKS — 5 ===
+  const runbooks = [
+    { key: "rb-deploy-prod", title: "Production Deployment Runbook", description: "Step-by-step guide for deploying to production with zero downtime.", category: "deployment", content: "## Production Deployment\n\n1. Run `bun run lint` and `bun run test`\n2. Create production build\n3. Deploy to staging for smoke test\n4. Blue-green deploy to production\n5. Monitor for 15 minutes\n6. If issues: rollback", steps: JSON.stringify([{ step: 1, action: "Run lint + tests", expected: "0 errors, 60 tests pass" }, { step: 2, action: "Build production", expected: "Build succeeds" }, { step: 3, action: "Deploy to staging", expected: "Smoke test passes" }, { step: 4, action: "Blue-green deploy", expected: "Zero downtime switch" }, { step: 5, action: "Monitor 15min", expected: "No error spike" }, { step: 6, action: "Rollback if needed", expected: "Instant revert" }]), estimatedTime: 30, lastTestedAt: daysAgo(3), lastUpdatedBy: admin?.id, status: "active", version: 3 },
+    { key: "rb-db-recovery", title: "Database Recovery Runbook", description: "Restore database from backup or failover to standby replica.", category: "recovery", content: "## Database Recovery\n\n1. Detect failure (health check fails)\n2. Promote standby replica\n3. Update DNS\n4. Verify connectivity\n5. Resume operations", steps: JSON.stringify([{ step: 1, action: "Detect failure", expected: "Health check fails" }, { step: 2, action: "Promote standby", expected: "Standby becomes primary" }, { step: 3, action: "Update DNS", expected: "Traffic routes to new primary" }, { step: 4, action: "Verify", expected: "All services connect" }]), estimatedTime: 15, lastTestedAt: daysAgo(30), lastUpdatedBy: admin?.id, status: "active", version: 2 },
+    { key: "rb-scale-up", title: "Emergency Scale-Up Runbook", description: "Manually scale up API servers during traffic spike or performance degradation.", category: "scaling", content: "## Emergency Scale-Up\n\n1. Check current node count and CPU\n2. Manually increase node count\n3. Monitor latency\n4. Adjust auto-scale thresholds", estimatedTime: 10, lastTestedAt: daysAgo(5), lastUpdatedBy: admin?.id, status: "active", version: 2 },
+    { key: "rb-security-incident", title: "Security Incident Response Runbook", description: "Respond to security incidents (breach, attack, vulnerability).", category: "security", content: "## Security Incident Response\n\n1. Assess severity (SEV1-5)\n2. Contain (block IPs, disable keys)\n3. Eradicate (patch, rotate secrets)\n4. Recover (restore, verify)\n5. Postmortem within 48h", estimatedTime: 60, lastTestedAt: daysAgo(45), lastUpdatedBy: admin?.id, status: "active", version: 1 },
+    { key: "rb-data-migration", title: "Data Migration Runbook", description: "Migrate data between environments or during schema changes.", category: "data", content: "## Data Migration\n\n1. Backup source data\n2. Test migration on staging\n3. Run migration in production\n4. Verify data integrity\n5. Update application", estimatedTime: 120, lastTestedAt: daysAgo(15), lastUpdatedBy: admin?.id, status: "draft", version: 1 },
+  ];
+  for (const r of runbooks) { await prisma.runbook.create({ data: r }); runbookCount++; }
+
+  // === ACCESSIBILITY AUDITS — 4 ===
+  const audits = [
+    { key: "audit-home-001", title: "Home Dashboard Accessibility Audit", description: "WCAG 2.1 AA audit of the main dashboard page", pageUrl: "/", targetLevel: "AA", totalChecks: 45, passedChecks: 43, failedChecks: 1, warningChecks: 1, complianceScore: 95.6, achievedLevel: "AA", findings: JSON.stringify([{ type: "failed", element: "badge-contrast", wcag: "1.4.3", description: "3 badges below 4.5:1 contrast ratio" }, { type: "warning", element: "tab-order", wcag: "2.4.3", description: "Tab order could be improved for dashboard tabs" }]), status: "completed", auditedBy: admin?.id, auditedAt: daysAgo(7) },
+    { key: "audit-evidence-001", title: "Evidence Upload Accessibility Audit", description: "WCAG 2.1 AA audit of evidence upload flow", pageUrl: "/evidence", targetLevel: "AA", totalChecks: 38, passedChecks: 38, failedChecks: 0, warningChecks: 0, complianceScore: 100, achievedLevel: "AA", findings: JSON.stringify([]), status: "completed", auditedBy: admin?.id, auditedAt: daysAgo(10) },
+    { key: "audit-gov-001", title: "Government Dashboard Accessibility Audit", description: "WCAG 2.1 AA audit of government operations dashboard", pageUrl: "/government", targetLevel: "AA", totalChecks: 42, passedChecks: 39, failedChecks: 2, warningChecks: 1, complianceScore: 92.9, achievedLevel: "AA", findings: JSON.stringify([{ type: "failed", element: "table-header", wcag: "1.3.1", description: "Table headers not properly associated with cells" }, { type: "failed", element: "color-only", wcag: "1.4.1", description: "Status indicated by color alone in 2 places" }]), status: "completed", auditedBy: admin?.id, auditedAt: daysAgo(14) },
+    { key: "audit-mobile-001", title: "Mobile Dashboard Accessibility Audit", description: "WCAG 2.1 AA audit on mobile viewport (375px)", pageUrl: "/ (mobile)", targetLevel: "AA", totalChecks: 35, passedChecks: 33, failedChecks: 1, warningChecks: 1, complianceScore: 94.3, achievedLevel: "AA", findings: JSON.stringify([{ type: "failed", element: "touch-target", wcag: "2.5.5", description: "2 buttons below 44px touch target" }]), status: "completed", auditedBy: admin?.id, auditedAt: daysAgo(5) },
+  ];
+  for (const a of audits) { await prisma.accessibilityAudit.create({ data: a }); auditCount++; }
+
+  // === I18N LOCALES — 5 ===
+  const locales = [
+    { locale: "en", language: "English", nativeName: "English", direction: "ltr", translationPct: 100, status: "active", totalKeys: 850, translatedKeys: 850, missingKeys: 0 },
+    { locale: "fr", language: "French", nativeName: "Français", direction: "ltr", translationPct: 92, status: "active", totalKeys: 850, translatedKeys: 782, missingKeys: 68 },
+    { locale: "sw", language: "Swahili", nativeName: "Kiswahili", direction: "ltr", translationPct: 85, status: "active", totalKeys: 850, translatedKeys: 723, missingKeys: 127 },
+    { locale: "tw", language: "Twi", nativeName: "Twi", direction: "ltr", translationPct: 78, status: "draft", totalKeys: 850, translatedKeys: 663, missingKeys: 187 },
+    { locale: "ha", language: "Hausa", nativeName: "Hausa", direction: "ltr", translationPct: 45, status: "draft", totalKeys: 850, translatedKeys: 383, missingKeys: 467 },
+  ];
+  for (const l of locales) { await prisma.i18nLocale.create({ data: l }); localeCount++; }
+
+  // === DEPLOYMENTS — 4 ===
+  const deployments = [
+    { key: "deploy-prod-v1.0", name: "Production Deploy v1.0.0", description: "Initial production deployment of Sentinel platform", environment: "production", status: "success", version: "1.0.0", commitSha: "a1b2c3d4", branch: "main", stages: JSON.stringify([{ name: "lint", status: "success", durationSec: 12 }, { name: "test", status: "success", durationSec: 8 }, { name: "build", status: "success", durationSec: 180 }, { name: "deploy", status: "success", durationSec: 45 }]), triggeredAt: daysAgo(2), completedAt: daysAgo(2), durationSec: 245, triggeredBy: admin?.id, deploymentUrl: "https://sentinel.africa" },
+    { key: "deploy-staging-v1.1", name: "Staging Deploy v1.1.0", description: "Staging deployment with M28 production readiness features", environment: "staging", status: "success", version: "1.1.0", commitSha: "e5f6g7h8", branch: "main", stages: JSON.stringify([{ name: "lint", status: "success", durationSec: 10 }, { name: "test", status: "success", durationSec: 7 }, { name: "build", status: "success", durationSec: 165 }, { name: "deploy", status: "success", durationSec: 30 }]), triggeredAt: hoursAgo(6), completedAt: hoursAgo(6), durationSec: 212, triggeredBy: admin?.id, deploymentUrl: "https://staging.sentinel.africa" },
+    { key: "deploy-prod-v1.0-rollback", name: "Production Rollback v1.0.0→v0.9.0", description: "Emergency rollback due to evidence API 503 errors", environment: "production", status: "rolled_back", version: "0.9.0", commitSha: "z9y8x7w6", branch: "main", stages: JSON.stringify([{ name: "rollback", status: "success", durationSec: 15 }]), triggeredAt: daysAgo(5), completedAt: daysAgo(5), durationSec: 15, triggeredBy: admin?.id },
+    { key: "deploy-preview-m28", name: "Preview Deploy — M28 Production Readiness", description: "Preview deployment for M28 production readiness review", environment: "preview", status: "success", version: "1.1.0-preview", commitSha: "p1q2r3s4", branch: "feat/m28-production", stages: JSON.stringify([{ name: "lint", status: "success", durationSec: 11 }, { name: "test", status: "success", durationSec: 9 }, { name: "build", status: "success", durationSec: 170 }, { name: "deploy", status: "success", durationSec: 25 }]), triggeredAt: hoursAgo(2), completedAt: hoursAgo(2), durationSec: 215, triggeredBy: admin?.id, deploymentUrl: "https://preview-m28.sentinel.africa" },
+  ];
+  for (const d of deployments) { await prisma.deploymentPipeline.create({ data: d }); deployCount++; }
+
+  console.log(`[seed] Seeded ${checkCount} readiness checks, ${incidentCount} incidents, ${runbookCount} runbooks, ${auditCount} accessibility audits, ${localeCount} i18n locales, ${deployCount} deployments.`);
 }
 
 main()
