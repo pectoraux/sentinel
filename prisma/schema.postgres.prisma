@@ -1474,3 +1474,88 @@ model CopilotMessage {
   @@index([role])
   @@index([createdAt])
 }
+
+model Mission {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  instructions    String
+  type            String   @default("evidence_gathering")
+  priority        String   @default("medium")
+  triggerType     String   @default("low_confidence")
+  triggerId       String?
+  triggerDescription String?
+  lat             Float?
+  lng             Float?
+  radiusM         Int      @default(500)
+  locationName    String?
+  intelligenceEventId String?
+  twinEntityId    String?
+  baseReward      Int      @default(100)
+  maxReward       Int      @default(500)
+  rewardCurrency  String   @default("trust_points")
+  qualityMultiplier Float  @default(1.0)
+  status          String   @default("open")
+  expiresAt       DateTime?
+  acceptedAt      DateTime?
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  completedAt     DateTime?
+  assignedToId    String?
+  assignedAt      DateTime?
+  submissionNotes String?
+  submissionEvidenceIds String?
+  submissionLat   Float?
+  submissionLng   Float?
+  verifiedById    String?
+  verificationNotes String?
+  verificationQuality String?
+  actualReward    Int?
+  model           String   @default("mission-ai-v1")
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([assignedToId])
+  @@index([triggerType])
+  @@index([lat, lng])
+  @@index([createdAt])
+}
+
+model MissionAssignment {
+  id              String   @id @default(cuid())
+  missionId       String
+  userId          String
+  status          String   @default("offered")
+  userTrustTier   String   @default("basic")
+  userDistanceKm  Float?
+  notifiedAt      DateTime @default(now())
+  respondedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@unique([missionId, userId])
+  @@index([missionId])
+  @@index([userId])
+  @@index([status])
+}
+
+model MissionRewardLog {
+  id              String   @id @default(cuid())
+  missionId       String
+  userId          String
+  baseReward      Int
+  qualityMultiplier Float
+  actualReward    Int
+  qualityLevel    String
+  trustPointsAwarded Int
+  awardedAt       DateTime @default(now())
+  metadata        String?
+
+  @@index([missionId])
+  @@index([userId])
+  @@index([awardedAt])
+}

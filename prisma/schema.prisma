@@ -1780,3 +1780,117 @@ model CopilotMessage {
   @@index([role])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 19 — Mission System
+// =============================================================================
+// When confidence is low, AI creates missions to gather additional evidence.
+// Example: "Need additional evidence within 500m of Pra River contamination."
+// Nearby trusted users receive the mission. Mission rewards depend on
+// verification quality — higher trust tier + better evidence = bigger reward.
+// =============================================================================
+
+model Mission {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // AI-generated mission instructions
+  instructions    String   // what the user should do (e.g. "Photograph the water at this GPS location")
+  // type: evidence_gathering | verification | inspection | drone_survey | sensor_check | witness_interview
+  type            String   @default("evidence_gathering")
+  // priority: low | medium | high | urgent
+  priority        String   @default("medium")
+  // trigger: what caused this mission to be created
+  triggerType     String   @default("low_confidence") // low_confidence | conflict_detected | ai_observation | manual
+  triggerId       String?  // fusion result ID, observation ID, etc.
+  triggerDescription String? // "Fused confidence 45% — need more evidence"
+  // target location
+  lat             Float?
+  lng             Float?
+  radiusM         Int      @default(500) // radius in meters for "within 500m"
+  locationName    String?
+  // linked entities
+  intelligenceEventId String?
+  twinEntityId    String?
+  // reward system
+  baseReward      Int      @default(100) // base reward in trust points
+  maxReward       Int      @default(500) // max reward with quality bonus
+  rewardCurrency  String   @default("trust_points")
+  // reward modifiers based on verification quality
+  qualityMultiplier Float  @default(1.0) // 0.5-2.0 based on evidence quality
+  // status: open | assigned | in_progress | submitted | verified | completed | expired | cancelled
+  status          String   @default("open")
+  // timing
+  expiresAt       DateTime?
+  acceptedAt      DateTime?
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  completedAt     DateTime?
+  // assignment
+  assignedToId    String?  // user assigned to the mission
+  assignedAt      DateTime?
+  // submission
+  submissionNotes String?
+  submissionEvidenceIds String? // JSON array of evidence IDs submitted
+  submissionLat   Float?
+  submissionLng   Float?
+  // verification
+  verifiedById    String?
+  verificationNotes String?
+  verificationQuality String? // low | medium | high | excellent
+  actualReward    Int?     // final reward paid (base × quality multiplier)
+  // AI metadata
+  model           String   @default("mission-ai-v1")
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([assignedToId])
+  @@index([triggerType])
+  @@index([lat, lng])
+  @@index([createdAt])
+}
+
+model MissionAssignment {
+  id              String   @id @default(cuid())
+  missionId       String
+  userId          String
+  // assignment status: offered | accepted | declined | expired
+  status          String   @default("offered")
+  // user's trust tier when offered (affects eligibility)
+  userTrustTier   String   @default("basic")
+  userDistanceKm  Float?   // distance from user to mission location
+  // notification
+  notifiedAt      DateTime @default(now())
+  respondedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@unique([missionId, userId])
+  @@index([missionId])
+  @@index([userId])
+  @@index([status])
+}
+
+model MissionRewardLog {
+  id              String   @id @default(cuid())
+  missionId       String
+  userId          String
+  // reward details
+  baseReward      Int
+  qualityMultiplier Float
+  actualReward    Int
+  qualityLevel    String   // low | medium | high | excellent
+  // trust impact
+  trustPointsAwarded Int
+  // metadata
+  awardedAt       DateTime @default(now())
+  metadata        String?  // JSON
+
+  @@index([missionId])
+  @@index([userId])
+  @@index([awardedAt])
+}
