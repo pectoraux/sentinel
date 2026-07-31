@@ -1559,3 +1559,116 @@ model MissionRewardLog {
   @@index([userId])
   @@index([awardedAt])
 }
+
+model RewardPool {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  type            String
+  sourceName      String
+  sourceType      String
+  sourceOrganizationId String?
+  totalFunds      Float    @default(0)
+  availableFunds  Float    @default(0)
+  distributedFunds Float   @default(0)
+  currency        String   @default("GHS")
+  distributionModel String @default("merit_based")
+  intelligenceEventId String?
+  status          String   @default("active")
+  isPublic        Boolean  @default(true)
+  opensAt         DateTime?
+  closesAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contributions   RewardContribution[]
+  distributions   RewardDistribution[]
+  ledger          RewardLedger[]
+
+  @@index([type])
+  @@index([status])
+  @@index([sourceType])
+  @@index([intelligenceEventId])
+}
+
+model RewardContribution {
+  id              String   @id @default(cuid())
+  poolId          String
+  userId          String?
+  organizationId  String?
+  contributorName String
+  contributorType String
+  amount          Float
+  currency        String   @default("GHS")
+  contributionScore Float  @default(0)
+  contributionType String  @default("financial")
+  evidenceId      String?
+  missionId       String?
+  description     String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([userId])
+  @@index([contributionType])
+  @@index([createdAt])
+}
+
+model RewardDistribution {
+  id              String   @id @default(cuid())
+  poolId          String
+  recipientId     String
+  recipientName   String
+  recipientTrustTier String?
+  amount          Float
+  currency        String   @default("GHS")
+  distributionModel String
+  contributionScore Float
+  qualityLevel    String?
+  missionId       String?
+  intelligenceEventId String?
+  transactionRef  String?
+  distributedById String?
+  distributedAt   DateTime @default(now())
+  status          String   @default("completed")
+  notes           String?
+  metadata        String?
+
+  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([recipientId])
+  @@index([status])
+  @@index([distributedAt])
+}
+
+model RewardLedger {
+  id              String   @id @default(cuid())
+  poolId          String
+  entryType       String
+  amount          Float
+  balance         Float
+  fromName        String?
+  toName          String?
+  fromId          String?
+  toId            String?
+  referenceType   String?
+  referenceId     String?
+  description     String
+  authorizedBy    String?
+  transactionRef  String?
+  metadata        String?
+  entryHash       String?
+  prevHash        String?
+  createdAt       DateTime @default(now())
+
+  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([entryType])
+  @@index([createdAt])
+  @@index([entryHash])
+}

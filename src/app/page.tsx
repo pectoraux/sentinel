@@ -57,6 +57,7 @@ import { PredictionDashboard } from "@/components/sentinel/predictions/predictio
 import { HotspotDashboard } from "@/components/sentinel/hotspots/hotspot-dashboard";
 import { CopilotDashboard } from "@/components/sentinel/copilot/copilot-dashboard";
 import { MissionDashboard } from "@/components/sentinel/missions/mission-dashboard";
+import { RewardDashboard } from "@/components/sentinel/rewards/reward-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
@@ -71,6 +72,7 @@ import { getPredictionService } from "@/modules/predictions";
 import { getHotspotService } from "@/modules/hotspots";
 import { getCopilotService } from "@/modules/copilot";
 import { getMissionService } from "@/modules/missions";
+import { getRewardService } from "@/modules/rewards";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -105,6 +107,7 @@ export default async function DashboardPage() {
     hotspotSummary,
     copilotSummary,
     missionSummary,
+    rewardSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -133,6 +136,7 @@ export default async function DashboardPage() {
     getHotspotService().summary(),
     getCopilotService().summary(),
     getMissionService().summary(),
+    getRewardService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -214,7 +218,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M19 · Mission System
+                  M20 · Reward Engine
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -243,7 +247,7 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Mission System
+                Reward Engine
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                 Production trust system replacing reputation. Tracks accuracy, reliability,
@@ -265,7 +269,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M10: Mission System (first child = first tab, default) === */}
+          {/* === M10: Reward Engine (first child = first tab, default) === */}
+          <RewardDashboard initialSummary={rewardSummary} />
+
+          {/* === M19: Mission System (second child = second tab) === */}
           <MissionDashboard initialSummary={missionSummary} />
 
           {/* === M18: Digital Twin AI Copilot (second child = second tab) === */}
@@ -586,12 +593,12 @@ export default async function DashboardPage() {
                     "M9: Independent Corroboration + Duplicate Detection",
                     "M9: Witness Confidence + Evidence Weighting",
                     "M9: 5-Tier System (Unverified→Confirmed)",
-                    "M10: Mission System (8-Factor)",
+                    "M10: Reward Engine (8-Factor)",
                     "M10: Accuracy · Reliability · False Reports",
                     "M10: Evidence Quality · Contribution Quality · Impact",
                     "M10: Decay (90-day half-life) · Fraud Resistance",
-                    "M20: Intelligence Engine (next)",
-                    "M21: Predictive Analytics (next)",
+                    "M21: Intelligence Engine (next)",
+                    "M22: Predictive Analytics (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -610,13 +617,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M16 — Mission System</span>
+            <span>Sentinel Platform · M16 — Reward Engine</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
-            <Link href="/api/v1/missions/summary" className="hover:text-foreground transition-colors">Missions</Link>
+            <Link href="/api/v1/rewards/summary" className="hover:text-foreground transition-colors">Rewards</Link>
             <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
             <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
             <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>

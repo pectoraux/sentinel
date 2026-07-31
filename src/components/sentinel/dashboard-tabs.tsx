@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "rewards", label: "Reward Engine", icon: Award, description: "M20 · Donation pools · NGO funding · Government grants · Transparent distribution · Contribution scoring · Hash-chained ledger", short: "M20" },
   { id: "missions", label: "Mission System", icon: Target, description: "M19 · AI creates missions when confidence is low · Nearby trusted users gather evidence · Rewards based on verification quality", short: "M19" },
   { id: "copilot", label: "AI Copilot", icon: MessageSquare, description: "M18 · Natural language interface to the Digital Twin · Real LLM · Ask questions about mines, rivers, forests, predictions, confidence", short: "M18" },
   { id: "hotspots", label: "Prediction Engine", icon: Crosshair, description: "M17 · Predict illegal mining hotspots · Future expansion · Confidence · Probability · Explainability", short: "M17" },
@@ -35,28 +36,29 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("missions");
+  const [active, setActive] = React.useState<string>("rewards");
 
   const childrenArray = React.Children.toArray(children);
-  const missions = childrenArray[0] ?? null;
-  const copilot = childrenArray[1] ?? null;
-  const hotspots = childrenArray[2] ?? null;
-  const predictions = childrenArray[3] ?? null;
-  const fusion = childrenArray[4] ?? null;
-  const observations = childrenArray[5] ?? null;
-  const cv = childrenArray[6] ?? null;
-  const satellite = childrenArray[7] ?? null;
-  const notifications = childrenArray[8] ?? null;
-  const trust = childrenArray[9] ?? null;
-  const corroboration = childrenArray[10] ?? null;
-  const intel = childrenArray[11] ?? null;
-  const evidence = childrenArray[12] ?? null;
-  const kg = childrenArray[13] ?? null;
-  const temporal = childrenArray[14] ?? null;
-  const twin = childrenArray[15] ?? null;
-  const geo = childrenArray[16] ?? null;
-  const identity = childrenArray[17] ?? null;
-  const foundation = childrenArray[18] ?? null;
+  const rewards = childrenArray[0] ?? null;
+  const missions = childrenArray[1] ?? null;
+  const copilot = childrenArray[2] ?? null;
+  const hotspots = childrenArray[3] ?? null;
+  const predictions = childrenArray[4] ?? null;
+  const fusion = childrenArray[5] ?? null;
+  const observations = childrenArray[6] ?? null;
+  const cv = childrenArray[7] ?? null;
+  const satellite = childrenArray[8] ?? null;
+  const notifications = childrenArray[9] ?? null;
+  const trust = childrenArray[10] ?? null;
+  const corroboration = childrenArray[11] ?? null;
+  const intel = childrenArray[12] ?? null;
+  const evidence = childrenArray[13] ?? null;
+  const kg = childrenArray[14] ?? null;
+  const temporal = childrenArray[15] ?? null;
+  const twin = childrenArray[16] ?? null;
+  const geo = childrenArray[17] ?? null;
+  const identity = childrenArray[18] ?? null;
+  const foundation = childrenArray[19] ?? null;
 
   return (
     <div>
@@ -93,6 +95,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "rewards" && rewards}
         {active === "missions" && missions}
         {active === "copilot" && copilot}
         {active === "hotspots" && hotspots}

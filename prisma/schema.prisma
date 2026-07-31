@@ -1894,3 +1894,150 @@ model MissionRewardLog {
   @@index([userId])
   @@index([awardedAt])
 }
+
+// =============================================================================
+// MILESTONE 20 — Reward Engine
+// =============================================================================
+// Transparent reward distribution from donation pools, NGO funding, and
+// government grants. No cryptocurrency — fiat-based with audit ledger.
+// Event-specific contribution scoring ensures fair, merit-based payouts.
+// =============================================================================
+
+model RewardPool {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  // type: donation | ngo_funding | government_grant | mission_rewards | community_fund
+  type            String
+  // source: who provided the funds
+  sourceName      String   // e.g. "WACAM Ghana", "EPA Ghana", "UNDP"
+  sourceType      String   // ngo | government | international | community | individual
+  sourceOrganizationId String?
+  // funds
+  totalFunds      Float    @default(0) // total deposited (in GHS — Ghana Cedis)
+  availableFunds  Float    @default(0) // remaining after distributions
+  distributedFunds Float   @default(0) // cumulative distributed
+  currency        String   @default("GHS")
+  // allocation rules
+  // distributionModel: proportional | equal | merit_based | first_come
+  distributionModel String @default("merit_based")
+  // event-specific: if linked to an intelligence event, contributions are scored per event
+  intelligenceEventId String?
+  // status: active | depleted | paused | closed
+  status          String   @default("active")
+  // transparency
+  isPublic        Boolean  @default(true)
+  // timing
+  opensAt         DateTime?
+  closesAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contributions   RewardContribution[]
+  distributions   RewardDistribution[]
+  ledger          RewardLedger[]
+
+  @@index([type])
+  @@index([status])
+  @@index([sourceType])
+  @@index([intelligenceEventId])
+}
+
+model RewardContribution {
+  id              String   @id @default(cuid())
+  poolId          String
+  userId          String?
+  organizationId  String?
+  // contributor info
+  contributorName String
+  contributorType String   // user | ngo | government | international | community
+  // contribution
+  amount          Float    // amount contributed (GHS)
+  currency        String   @default("GHS")
+  // contribution score: how much this contribution is "worth" in the merit system
+  // Factors: trust tier of contributor × amount × evidence quality multiplier
+  contributionScore Float  @default(0)
+  // what the contribution is for (specific evidence, mission, or general)
+  contributionType String  @default("financial") // financial | evidence | mission_completion | verification | referral
+  // linked evidence/mission (if applicable)
+  evidenceId      String?
+  missionId       String?
+  // metadata
+  description     String?
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([userId])
+  @@index([contributionType])
+  @@index([createdAt])
+}
+
+model RewardDistribution {
+  id              String   @id @default(cuid())
+  poolId          String
+  recipientId     String   // user ID receiving the reward
+  recipientName   String
+  recipientTrustTier String?
+  // amount
+  amount          Float    // amount distributed (GHS)
+  currency        String   @default("GHS")
+  // distribution basis
+  distributionModel String  // merit_based | proportional | equal | first_come
+  contributionScore Float   // the score that earned this distribution
+  qualityLevel    String?   // low | medium | high | excellent (from mission verification)
+  // linked mission/event
+  missionId       String?
+  intelligenceEventId String?
+  // transparency
+  transactionRef  String?  // bank transfer / mobile money reference
+  distributedById String?  // who authorized the distribution
+  distributedAt   DateTime @default(now())
+  // status: pending | processing | completed | failed | reversed
+  status          String   @default("completed")
+  notes           String?
+  metadata        String?  // JSON
+
+  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([recipientId])
+  @@index([status])
+  @@index([distributedAt])
+}
+
+model RewardLedger {
+  id              String   @id @default(cuid())
+  poolId          String
+  // entryType: deposit | distribution | adjustment | reversal | fee
+  entryType       String
+  amount          Float    // positive for deposits, negative for distributions
+  balance         Float    // running balance after this entry
+  // parties
+  fromName        String?
+  toName          String?
+  fromId          String?
+  toId            String?
+  // reference
+  referenceType   String?  // contribution | distribution | manual
+  referenceId     String?  // contribution ID or distribution ID
+  description     String
+  // audit
+  authorizedBy    String?
+  transactionRef  String?  // bank/mobile money reference
+  metadata        String?  // JSON
+  // hash chain for tamper-evidence (same pattern as evidence M7)
+  entryHash       String?
+  prevHash        String?
+  createdAt       DateTime @default(now())
+
+  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@index([poolId])
+  @@index([entryType])
+  @@index([createdAt])
+  @@index([entryHash])
+}
