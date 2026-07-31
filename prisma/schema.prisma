@@ -1514,3 +1514,54 @@ model DetectionBatch {
   @@index([status])
   @@index([batchType])
 }
+
+// =============================================================================
+// MILESTONE 14 — AI Observation Engine
+// =============================================================================
+// AI creates Intelligence Events from CV detection results. Each observation
+// stores: evidence (linked detection results), confidence, reasoning (AI-generated
+// explanation), affected entities (twin entities impacted), and historical
+// comparison (comparison with past observations of the same area/type).
+// =============================================================================
+
+model AIObservation {
+  id              String   @id @default(cuid())
+  // source: the CV detection that triggered this observation
+  detectionResultId String?
+  // linked intelligence event (created by this observation)
+  intelligenceEventId String?
+  // observation metadata
+  title           String
+  summary         String   // AI-generated one-line summary
+  // type: matches the detection type (excavation, forest_loss, etc.)
+  type            String
+  severity        String   // low | medium | high | critical
+  confidence      Float    // 0.0-1.0 (from detection, may be adjusted)
+  // AI reasoning — the full chain of thought explaining why this observation was made
+  reasoning       String   // structured reasoning text
+  reasoningSteps  String?  // JSON array of reasoning steps
+  // evidence — linked detection results supporting this observation
+  evidenceIds     String?  // JSON array of detection result IDs
+  evidenceSummary String?  // summary of supporting evidence
+  // affected entities — twin entities impacted by this observation
+  affectedEntityIds String? // JSON array of twin entity IDs
+  affectedEntitiesSummary String? // human-readable summary of affected entities
+  // historical comparison — comparison with past observations
+  historicalComparison String? // JSON: { previousObservations: [...], trend: "increasing|decreasing|stable|new", changePercent: number }
+  // metadata
+  model           String   @default("vlm-zai")
+  imageUrl        String?  // the image that was analyzed
+  location        String?  // JSON { lat, lng, name }
+  processingMs    Int      @default(0)
+  // status: pending | processed | published | dismissed
+  status          String   @default("published")
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([confidence])
+  @@index([status])
+  @@index([detectionResultId])
+  @@index([intelligenceEventId])
+  @@index([createdAt])
+}

@@ -1297,3 +1297,35 @@ model DetectionBatch {
   @@index([status])
   @@index([batchType])
 }
+
+model AIObservation {
+  id              String   @id @default(cuid())
+  detectionResultId String?
+  intelligenceEventId String?
+  title           String
+  summary         String
+  type            String
+  severity        String
+  confidence      Float
+  reasoning       String
+  reasoningSteps  String?
+  evidenceIds     String?
+  evidenceSummary String?
+  affectedEntityIds String?
+  affectedEntitiesSummary String?
+  historicalComparison String?
+  model           String   @default("vlm-zai")
+  imageUrl        String?
+  location        String?
+  processingMs    Int      @default(0)
+  status          String   @default("published")
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([confidence])
+  @@index([status])
+  @@index([detectionResultId])
+  @@index([intelligenceEventId])
+  @@index([createdAt])
+}

@@ -548,3 +548,24 @@ Stage Summary:
 - Milestone 13 (Computer Vision Platform) is COMPLETE and browser-verified.
 - Delivered: REAL AI detection using the VLM (Vision Language Model) via z-ai-web-dev-sdk. No placeholders, no mock — the vision model actually analyzes image pixels and returns AI-generated descriptions with confidence scores. 7 detection types covering all requested features: Excavation, Roads, Tailings, Forest Loss, Water Changes, Buildings, Equipment. 21 real detections on 3 AI-generated satellite images with 90% detection rate and 90% average confidence.
 - The CV Platform integrates with: M12 Satellite Ingestion (detect on satellite scenes), M7 Evidence Platform (detect on evidence images), M4 Digital Twin (detection results update twin entity versions), M8 Community Intelligence (detection results create intelligence events).
+
+---
+Task ID: M14
+Agent: orchestrator
+Task: Milestone 14 — AI Observation Engine
+
+Work Log:
+- Extended Prisma schema with AIObservation model: detectionResultId, intelligenceEventId, title, summary, type, severity, confidence, reasoning (full chain-of-thought text), reasoningSteps (JSON array), evidenceIds (JSON), evidenceSummary, affectedEntityIds (JSON), affectedEntitiesSummary, historicalComparison (JSON with trend/changePercent/previousObservations), model, imageUrl, location, processingMs, status.
+- Built AI Observation domain (observation-types.ts): 7 observation types with severity mapping (e.g. excavation detected at "medium" → observed as "high"), trend computation (new/increasing/decreasing/stable based on confidence change vs historical average), generateReasoning() producing structured 6-step chain-of-thought (Vision Analysis → Observation → Severity → Impact Area → Historical Comparison → Conclusion), mapAffectedEntities() mapping detection types to twin entity types.
+- Built ObservationService: createFromDetection() — takes a CV detection result, finds historical observations of same type, computes trend, generates AI reasoning with 6 steps, maps affected twin entities via Knowledge Graph, creates AIObservation record, creates linked M8 Intelligence Event with "created" event in the event stream, writes outbox event. createFromAllDetections() — batch processes all positive detections. list(), getById(), summary().
+- Built 3 API routes: ai-observations/summary, ai-observations (GET list, POST create from detection or batch), ai-observations/[id].
+- Seeded 19 AI observations from the M13 CV detection results — each with full reasoning (6-step chain of thought), evidence summary (linked detection IDs + VLM processing info), historical comparison (trend analysis: first detection for each type = "new", subsequent = "stable"/"increasing"/"decreasing" based on confidence change), affected entities mapping. All 19 linked to M8 Intelligence Events with "created" stream entries. Results: 3 critical, 9 high, 7 medium severity. 94% average confidence. By type: excavation=3, forest_loss=3, roads=3, tailings=3, water_changes=3, buildings=2, equipment=2.
+- UI: Built ObservationDashboard with 8 KPIs (observations, with events, avg confidence, critical, + 4 type counts), AI Observation Feed (19 observations with type colors, confidence bars, severity badges, trend indicators, timestamps — click to select), Observation Detail panel (AI Reasoning with 6-step chain-of-thought, Evidence summary, Affected Entities, Historical Comparison with trend + change%, Intelligence Event link), Detection Trends (min/max confidence range per type), Engine Features (6 capability cards).
+- Updated DashboardTabs to 14 tabs (AI Observations default). Updated hero, header badge, footer, checklist.
+- `bun run lint` → 0 errors. `bun run test` → 60/60 pass.
+- Agent Browser: AI Observations tab (default) renders all sections. 14 tabs switch correctly. Summary: 19 observations, 19 with intel events, 94% avg confidence, 3 critical + 9 high + 7 medium. No errors.
+
+Stage Summary:
+- Milestone 14 (AI Observation Engine) is COMPLETE and browser-verified.
+- Delivered: AI creates Intelligence Events from CV detection results. Each observation stores: Evidence (linked detection results with VLM provenance), Confidence (from VLM, trend-adjusted), Reasoning (6-step AI chain-of-thought: Vision Analysis → Observation → Severity → Impact Area → Historical Comparison → Conclusion), Affected Entities (twin entities mapped via Knowledge Graph), Historical Comparison (trend analysis: new/increasing/decreasing/stable with change percentage). All 19 observations linked to M8 Intelligence Events with event-sourced stream entries.
+- Integrates: M13 Computer Vision (detection results as source), M8 Community Intelligence (creates events with event sourcing), M6 Knowledge Graph (affected entity mapping), M4 Digital Twin (entity impact), M5 Temporal Engine (historical comparison over time).
