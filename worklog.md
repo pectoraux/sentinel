@@ -617,3 +617,27 @@ Stage Summary:
 - Milestone 16 (Environmental Intelligence) is COMPLETE and browser-verified.
 - Delivered: 5 predictive models using real platform data: Sediment Flow (mine proximity + excavation + satellite change + erosion), River Impact (sediment + pollution + upstream mines), Forest Loss (mines + CV detections + satellite + protected status), Downstream Effects (upstream risk + communities + population + water dependency), Protected Area Risk (mines + forest loss + satellite + enforcement). Each model uses weighted multi-factor analysis combining data from M4 twin entities, M6 knowledge graph, M12 satellite, M13 CV detections, and M15 fusion results to produce a risk score, risk level, confidence, timeframe, and affected entities.
 - Integrates: M4 Digital Twin (rivers/forests/protected areas as targets), M6 Knowledge Graph (mine→river relationships), M12 Satellite (change detection), M13 CV (excavation/water/forest_loss detections), M15 Fusion (evidence confidence).
+
+---
+Task ID: M17
+Agent: orchestrator
+Task: Milestone 17 — Prediction Engine
+
+Work Log:
+- Extended Prisma schema with HotspotPrediction model (type: hotspot|expansion, lat/lng/locationName, prediction, probability, confidence, riskLevel, expansionDirection, expansionRadiusKm, expansionTimeframe, explanation, explanationSteps JSON, factors JSON, inputMineIds, inputDetectionIds, inputPredictionIds, inputSatelliteIds, inputFusionIds, atRiskEntities, model, algorithm).
+- Built hotspot domain (hotspot-types.ts): 2 prediction types with weighted multi-factor algorithms + full explainability:
+  - Hotspot Prediction: 8 factors — Mine Density (0.25), CV Detection Intensity (0.20), Environmental Risk (0.15), Satellite Change (0.10), Geographic Vulnerability (0.10), Road Access (0.08), Governance Gap (0.07), Evidence Fusion (0.05). Produces 9-step explainability chain: Spatial Clustering → AI Detection → Environmental Context → Satellite Analysis → Vulnerability → Accessibility → Governance → Probability → Conclusion.
+  - Expansion Forecast: 7 factors — Expansion Rate (0.30), Available Land (0.20), New Activity Detections (0.15), Environmental Risk (0.12), Satellite Change (0.10), Road Access (0.08), Governance Gap (0.05). Predicts expansion direction (N/NE/E/SE/S/SW/W/NW), radius (km), and timeframe.
+  Each produces probability (0-1), confidence (0-1), riskLevel (low/moderate/high/critical), human-readable prediction, step-by-step explanation, factor breakdown with weighted contributions, and at-risk entities.
+- Built HotspotService: runAll() gathers real data from M4 twin entities (mines, rivers, forests, protected areas, roads), computes spatial clustering (Haversine distance <10km for nearby mines), M13 CV detections (excavation/water/forest_loss), M16 environmental predictions (avg risk score), M12 satellite scenes (recent change), M15 fusion results (avg confidence) → runs hotspot predictions for each mine cluster + expansion predictions for active mines → persists HotspotPrediction records. list(), getById(), summary().
+- Built 4 API routes: hotspots/summary, hotspots (list), hotspots/[id], hotspots/run (POST).
+- Seeded 5 predictions from real data: 3 hotspot predictions (one per mine — Prestea Galamsey Complex, Obuasi Illegal Pit, Dunkwa Alluvial Site) + 2 expansion predictions (for active mines). Results: 58% average probability, 5 moderate risk level, 0 critical. Hotspot type: 3 (58% avg prob), Expansion type: 2 (56% avg prob).
+- UI: Built HotspotDashboard with 8 KPIs, prediction feed (5 predictions with type icons, probability bars, risk level badges, expansion direction/timeframe, location coords, timestamps), Prediction Detail panel (probability gauge, prediction text, Explainability with 9-step reasoning chain, risk factors with weighted contribution bars + descriptions), Risk Distribution chart, Prediction Models explanation (2 models with factor descriptions + explainability step list).
+- Updated DashboardTabs to 17 tabs (Prediction Engine default). Updated hero, header badge, footer, checklist.
+- `bun run lint` → 0 errors. `bun run test` → 60/60 pass.
+- Agent Browser: Prediction Engine tab (default) renders all sections. 17 tabs switch correctly. Summary: 5 predictions, 58% avg probability, 0 critical, 5 moderate. No errors.
+
+Stage Summary:
+- Milestone 17 (Prediction Engine) is COMPLETE and browser-verified.
+- Delivered: Predicts illegal mining hotspots (spatial clustering + 8-factor Bayesian model) and future expansion (historical rate + 7-factor forecast). Each prediction includes: Probability (0-100% mining likelihood), Confidence (model certainty), and full Explainability (9-step reasoning chain: Spatial Clustering → AI Detection → Environmental Context → Satellite → Vulnerability → Accessibility → Governance → Probability → Conclusion). Expansion predictions include direction, radius, and timeframe. Uses real data from M4 (mines/rivers/forests), M6 (knowledge graph proximity), M13 (CV detections), M15 (fusion confidence), M16 (environmental risk).
+- Integrates: M4 Digital Twin (mines as cluster centers), M6 Knowledge Graph (spatial relationships), M13 Computer Vision (excavation detections), M15 Evidence Fusion (confidence), M16 Environmental Intelligence (risk scores), M12 Satellite (change detection).

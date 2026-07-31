@@ -1682,3 +1682,54 @@ model EnvironmentalPrediction {
   @@index([targetEntityId])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 17 — Prediction Engine
+// =============================================================================
+// Predicts illegal mining hotspots and future expansion with probability,
+// confidence, and full explainability. Uses spatial clustering of existing
+// mines, CV detections, environmental predictions, and satellite data.
+// =============================================================================
+
+model HotspotPrediction {
+  id              String   @id @default(cuid())
+  // type: hotspot | expansion
+  type            String
+  // location
+  lat             Float
+  lng             Float
+  locationName    String?
+  // prediction
+  prediction      String   // human-readable
+  probability     Float    @default(0) // 0.0-1.0 — likelihood of illegal mining
+  confidence      Float    @default(0) // 0.0-1.0 — model confidence in the prediction
+  riskLevel       String   @default("low") // low | moderate | high | critical
+  // expansion forecast
+  expansionDirection String? // N | NE | E | SE | S | SW | W | NW | radial
+  expansionRadiusKm Float?  // predicted expansion radius in km
+  expansionTimeframe String? // immediate | 1-3 months | 3-6 months | 6-12 months
+  // explainability — full breakdown of WHY this prediction was made
+  explanation     String   // structured explanation text
+  explanationSteps String? // JSON array of step-by-step reasoning
+  factors         String   // JSON: [{ name, value, weight, contribution, description }]
+  // input data
+  inputMineIds    String?  // JSON array of mine entity IDs
+  inputDetectionIds String? // JSON array of CV detection IDs
+  inputPredictionIds String? // JSON array of environmental prediction IDs
+  inputSatelliteIds String? // JSON array of satellite scene IDs
+  inputFusionIds  String?  // JSON array of fusion result IDs
+  // nearby entities at risk
+  atRiskEntities  String?  // JSON: [{ entityId, name, type, distanceKm, riskLevel }]
+  // model metadata
+  model           String   @default("hotspot-v1")
+  algorithm       String   @default("spatial_cluster_bayesian")
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([riskLevel])
+  @@index([probability])
+  @@index([confidence])
+  @@index([lat, lng])
+  @@index([createdAt])
+}

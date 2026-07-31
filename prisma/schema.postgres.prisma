@@ -1405,3 +1405,38 @@ model EnvironmentalPrediction {
   @@index([targetEntityId])
   @@index([createdAt])
 }
+
+model HotspotPrediction {
+  id              String   @id @default(cuid())
+  type            String
+  lat             Float
+  lng             Float
+  locationName    String?
+  prediction      String
+  probability     Float    @default(0)
+  confidence      Float    @default(0)
+  riskLevel       String   @default("low")
+  expansionDirection String?
+  expansionRadiusKm Float?
+  expansionTimeframe String?
+  explanation     String
+  explanationSteps String?
+  factors         String
+  inputMineIds    String?
+  inputDetectionIds String?
+  inputPredictionIds String?
+  inputSatelliteIds String?
+  inputFusionIds  String?
+  atRiskEntities  String?
+  model           String   @default("hotspot-v1")
+  algorithm       String   @default("spatial_cluster_bayesian")
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([riskLevel])
+  @@index([probability])
+  @@index([confidence])
+  @@index([lat, lng])
+  @@index([createdAt])
+}
