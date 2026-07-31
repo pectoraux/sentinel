@@ -183,3 +183,52 @@ Stage Summary:
 - Delivered: Unified TwinEntity model where every environmental object (River, Road, Mine, Forest, Community, Inspection, Event, Concession, Protected Area, Equipment, Historical Imagery) becomes a versioned, related, historical entity. Every entity has: Versioning (immutable snapshots with diffs, restore creates new version), Relationships (12-type graph: affects/contains/monitors/depends_on/threatens/upstream/downstream...), History (event timeline with severity/source), Metadata (flexible JSON with type-specific schema).
 - 27 real Ghana entities seeded with 26 graph relationships + 28 versioned snapshots + 28 timeline events.
 - The Digital Twin is designed so M5 (Intelligence) can create detection events that update twin entities (new versions), M6 (Community) can submit reports that become twin events, and the simulation engine can project future states onto the versioned entity model.
+
+---
+Task ID: M5
+Agent: orchestrator
+Task: Milestone 5 — Temporal Engine
+
+Work Log:
+- Fixed M4 versioning: TwinEntityService.update() and restoreVersion() now backfill validTo on the previous version when creating a new version (the core temporal invariant: nothing is overwritten, everything is versioned).
+- Built TemporalService (src/modules/twin/application/services/temporal.service.ts):
+  - getStateAtTime(entityId, timestamp): returns the version valid at a point in time (WHERE validFrom <= T AND (validTo IS NULL OR validTo > T))
+  - getSystemStateAtTime(timestamp, type): system-wide point-in-time query — all entities that existed at that time
+  - getEntityTimeline(entityId, from, to): merged chronological timeline of versions + events for one entity
+  - getSystemTimeline(from, to, type, limit): system-wide change timeline (all versions + events across all entities, ordered chronologically)
+  - compareVersions(entityId, v1, v2): structured deep diff between two version snapshots (field-by-field from/to)
+  - replayTimeline(from, to): chronological changes grouped by day for history replay
+  - temporalSummary(from, to): aggregate metrics (versions, events, changesByDay, recentChanges, range)
+  - timeRange/timePoint helpers: preset helpers for "yesterday", "last_week", "last_month", "last_year", "all" / "now"
+- Built 7 API routes under /api/v1/twin/:
+  - temporal/summary (GET, public): temporal aggregate metrics with preset support
+  - temporal/timeline (GET, public): system-wide change timeline
+  - temporal/replay (GET, public): history replay grouped by day
+  - temporal/at-time (GET, public): point-in-time system state query (supports preset=yesterday|last_month|last_year|now and entityId for single-entity queries)
+  - entities/[id]/temporal (GET, public): entity state at time OR entity timeline in range
+  - entities/[id]/compare (GET, public): version comparison with structured diff
+- Re-seeded with proper temporal spread: 27 entities created at different times over 365 days (rivers/forests/concessions 365 days ago, mines 270-280 days ago, sensors 60-90 days ago, recent events 3-7 days ago). 32 versions with validTo properly set (Prestea mine has 3 versions: v1 280d ago → v2 120d ago → v3 15d ago; Obuasi mine, Pra River, Atewa Forest all have 2 versions). 33 events at realistic timestamps. Version creation events use the entity's creation date, not "now".
+- UI: Built TemporalDashboard component with:
+  - 6 KPIs (total versions, total events, active days, entity types, critical events, time range span)
+  - Time Travel panel: preset buttons (Now/Yesterday/Last Month/Last Year) that query the API and display the system state at that time — shows entity count + list with version numbers + "current/historical" badges
+  - Version Comparison panel: entity selector + v1/v2 inputs → side-by-side diff with from→to field changes
+  - History Replay player: play/pause/skip controls, progress bar, day-by-day change display
+  - System Timeline: chronological list of all changes (versions + events) with severity colors
+  - Changes Over Time: bar chart of changes per day across the full temporal range
+- Updated DashboardTabs to 5 tabs (Temporal Engine default, Digital Twin, Geospatial, Identity & Trust, Platform Foundation). Updated hero, header badge, footer, checklist, API info directory.
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification (single session):
+  • All 7 temporal API endpoints return HTTP 200.
+  • Time travel verified via API: Now=27 entities, Yesterday=27, Last Month=24, Last Year=5 — temporal filtering correctly reflects entity creation times.
+  • Temporal summary: 32 versions, 33 events, 22 active days, range spanning 365 days.
+  • Timeline: 65 total changes (32 versions + 33 events).
+  • Replay: 22 days with changes, grouped correctly.
+  • Temporal Engine tab (default): all 5 sections render — Time Travel, Version Comparison, History Replay, System Timeline, Changes Over Time.
+  • 5 tabs switch correctly (Temporal → Digital Twin → Geospatial).
+  • Responsive: no horizontal scroll at 390px. No console errors.
+
+Stage Summary:
+- Milestone 5 (Temporal Engine) is COMPLETE and browser-verified.
+- Delivered: Full bi-temporal query engine. "Nothing is overwritten. Everything is versioned." Users can query the state of any entity (or the entire system) at any point in time — yesterday, last month, last year. Version comparison shows structured field-by-field diffs. History replay animates changes day by day. The system timeline shows all 65 changes across 22 active days spanning 365 days.
+- 32 versioned snapshots with proper validFrom/validTo ranges, 33 timeline events, 7 temporal API endpoints, interactive time-travel UI with preset buttons and replay player.
+- The Temporal Engine is the audit-trail backbone: M6 (Intelligence) detections create new versions, M7 (Community) reports become timeline events, and every change is forever queryable at any point in time.

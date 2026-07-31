@@ -186,6 +186,13 @@ export class TwinEntityService {
       data: updateData,
     });
 
+    // Close the previous version's validTo (temporal engine: nothing is overwritten)
+    const now = new Date();
+    await db.twinEntityVersion.updateMany({
+      where: { entityId: id, version: current.currentVersion },
+      data: { validTo: now },
+    });
+
     // Create version snapshot
     await db.twinEntityVersion.create({
       data: {
@@ -195,7 +202,7 @@ export class TwinEntityService {
         changeReason: params.changeReason ?? "Updated",
         diff: JSON.stringify(diff),
         changedById: params.changedById,
-        validFrom: new Date(),
+        validFrom: now,
       },
     });
 
@@ -244,6 +251,13 @@ export class TwinEntityService {
       },
     });
 
+    // Close the previous version's validTo
+    const now = new Date();
+    await db.twinEntityVersion.updateMany({
+      where: { entityId: id, version: entity.currentVersion },
+      data: { validTo: now },
+    });
+
     await db.twinEntityVersion.create({
       data: {
         entityId: id,
@@ -252,7 +266,7 @@ export class TwinEntityService {
         changeReason: `Restored to version ${targetVersion}`,
         diff: JSON.stringify({ restoredFrom: targetVersion }),
         changedById: restoredBy,
-        validFrom: new Date(),
+        validFrom: now,
       },
     });
 

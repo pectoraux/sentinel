@@ -13,6 +13,13 @@ export {
 } from "./application/services/twin.service";
 
 export {
+  TemporalService,
+  getTemporalService,
+  timeRange,
+  timePoint,
+} from "./application/services/temporal.service";
+
+export {
   ENTITY_TYPE_CATALOGUE,
   ENTITY_TYPES,
   RELATIONSHIP_TYPES,

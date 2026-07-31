@@ -70,6 +70,13 @@ export const GET = withHandler(async () => {
             { path: "/api/v1/twin/relationships", method: "GET", auth: false, description: "List relationships" },
             { path: "/api/v1/twin/relationships", method: "POST", auth: true, permission: "organizations:manage", description: "Create relationship" },
             { path: "/api/v1/twin/graph", method: "GET", auth: false, description: "Entity graph (nodes + edges)" },
+            // M5 — Temporal Engine
+            { path: "/api/v1/twin/temporal/summary", method: "GET", auth: false, description: "Temporal aggregate metrics" },
+            { path: "/api/v1/twin/temporal/timeline", method: "GET", auth: false, description: "System-wide change timeline" },
+            { path: "/api/v1/twin/temporal/replay", method: "GET", auth: false, description: "History replay (by day)" },
+            { path: "/api/v1/twin/temporal/at-time", method: "GET", auth: false, description: "Point-in-time state query" },
+            { path: "/api/v1/twin/entities/[id]/temporal", method: "GET", auth: false, description: "Entity state at time / timeline" },
+            { path: "/api/v1/twin/entities/[id]/compare", method: "GET", auth: false, description: "Compare two versions" },
           ],
         },
       ],

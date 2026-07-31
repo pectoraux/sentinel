@@ -666,9 +666,46 @@ const TWIN_RELATIONSHIPS = [
 ];
 
 async function seedTwinData() {
+  const now = new Date();
+  // Temporal spread: entities created at different times over the past year
+  // so temporal queries (yesterday, last month, last year) return different results.
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  // Assign each entity a creation time (spread across ~365 days)
+  const creationTimes: Record<string, Date> = {
+    "river-pra-main": daysAgo(365),
+    "river-ankobra": daysAgo(360),
+    "river-offin": daysAgo(350),
+    "river-birim": daysAgo(340),
+    "road-tarkwa-prestea": daysAgo(300),
+    "road-obuasi-konongo": daysAgo(290),
+    "mine-prestea-galamsey": daysAgo(280),
+    "mine-obuasi-illegal": daysAgo(270),
+    "mine-dunkwa-alluvial": daysAgo(250),
+    "forest-atewa": daysAgo(365),
+    "forest-tano-offin": daysAgo(320),
+    "community-prestea": daysAgo(310),
+    "community-obuasi": daysAgo(305),
+    "community-dunkwa": daysAgo(200),
+    "concession-obuasi-anglogold": daysAgo(365),
+    "concession-tarkwa-goldfields": daysAgo(360),
+    "protected-atewa-sanctuary": daysAgo(365),
+    "protected-pra-basin": daysAgo(180),
+    "sensor-pra-s1": daysAgo(90),
+    "drone-obuasi-d1": daysAgo(60),
+    "imagery-prestea-2020": daysAgo(365),
+    "imagery-prestea-2024": daysAgo(15),
+    "imagery-atewa-2022": daysAgo(280),
+    "event-cyanide-spill-2024": daysAgo(7),
+    "event-forest-clearing-2024": daysAgo(3),
+    "inspection-prestea-2024-06": daysAgo(45),
+    "inspection-obuasi-2024-05": daysAgo(60),
+  };
+
   // Create entities
   const entityKeyToId: Record<string, string> = {};
   for (const ent of TWIN_ENTITIES) {
+    const createdAt = creationTimes[ent.key] ?? daysAgo(30);
     const created = await prisma.twinEntity.upsert({
       where: { key: ent.key },
       create: {
@@ -683,23 +720,25 @@ async function seedTwinData() {
         region: ent.region,
         metadata: JSON.stringify(ent.metadata),
         currentVersion: 1,
+        createdAt,
+        updatedAt: createdAt,
       },
       update: {},
     });
     entityKeyToId[ent.key] = created.id;
 
-    // Create initial version
+    // Create initial version (validFrom = creation time, validTo = null for now)
     await prisma.twinEntityVersion.create({
       data: {
         entityId: created.id,
         version: 1,
         snapshot: JSON.stringify({ ...ent, version: 1 }),
         changeReason: "Initial creation",
-        validFrom: new Date(created.createdAt),
+        validFrom: createdAt,
       },
     }).catch(() => {});
 
-    // Create a creation event
+    // Create a creation event at the creation time
     await prisma.twinEvent.create({
       data: {
         entityId: created.id,
@@ -710,37 +749,214 @@ async function seedTwinData() {
         source: "seed",
         sourceType: "system",
         payload: JSON.stringify({ type: ent.type, key: ent.key }),
+        timestamp: createdAt,
       },
     }).catch(() => {});
   }
 
-  // Add a couple of version updates to show versioning
+  // --- Temporal version updates ---
+  // Prestea mine: v1 (280 days ago) → v2 (120 days ago) → v3 (15 days ago)
   const presteaMine = entityKeyToId["mine-prestea-galamsey"];
   if (presteaMine) {
-    await prisma.twinEntity.update({
-      where: { id: presteaMine },
-      data: { currentVersion: 2, status: "active", metadata: JSON.stringify({ ...TWIN_ENTITIES[6]!.metadata, production_tons: 14, area_hectares: 360 }) },
+    const ent = TWIN_ENTITIES[6]!;
+    const v1Time = creationTimes["mine-prestea-galamsey"]!;
+    const v2Time = daysAgo(120);
+    const v3Time = daysAgo(15);
+
+    // Close v1, create v2
+    await prisma.twinEntityVersion.updateMany({
+      where: { entityId: presteaMine, version: 1 },
+      data: { validTo: v2Time },
     });
     await prisma.twinEntityVersion.create({
       data: {
         entityId: presteaMine,
         version: 2,
-        snapshot: JSON.stringify({ ...TWIN_ENTITIES[6], status: "active", metadata: { ...TWIN_ENTITIES[6]!.metadata, production_tons: 14, area_hectares: 360 }, version: 2 }),
-        changeReason: "Expansion detected via satellite imagery",
-        diff: JSON.stringify({ production_tons: { from: 12, to: 14 }, area_hectares: { from: 340, to: 360 } }),
-        validFrom: new Date(),
+        snapshot: JSON.stringify({ ...ent, status: "active", metadata: { ...ent.metadata, production_tons: 13, area_hectares: 350 }, version: 2 }),
+        changeReason: "Moderate expansion detected via satellite imagery",
+        diff: JSON.stringify({ production_tons: { from: 12, to: 13 }, area_hectares: { from: 340, to: 350 } }),
+        validFrom: v2Time,
       },
     });
     await prisma.twinEvent.create({
       data: {
         entityId: presteaMine,
         type: "updated",
-        title: "Mine expansion detected",
-        description: "Satellite imagery analysis detected 20-hectare expansion",
+        title: "Mine expansion detected (v2)",
+        description: "Satellite imagery analysis detected 10-hectare expansion",
         severity: "high",
         source: "satellite",
         sourceType: "satellite",
-        payload: JSON.stringify({ fromVersion: 1, toVersion: 2, diff: { production_tons: { from: 12, to: 14 }, area_hectares: { from: 340, to: 360 } } }),
+        payload: JSON.stringify({ fromVersion: 1, toVersion: 2, diff: { production_tons: { from: 12, to: 13 }, area_hectares: { from: 340, to: 350 } } }),
+        timestamp: v2Time,
+      },
+    });
+
+    // Close v2, create v3
+    await prisma.twinEntityVersion.updateMany({
+      where: { entityId: presteaMine, version: 2 },
+      data: { validTo: v3Time },
+    });
+    await prisma.twinEntityVersion.create({
+      data: {
+        entityId: presteaMine,
+        version: 3,
+        snapshot: JSON.stringify({ ...ent, status: "active", metadata: { ...ent.metadata, production_tons: 14, area_hectares: 360 }, version: 3 }),
+        changeReason: "Further expansion detected via recent imagery",
+        diff: JSON.stringify({ production_tons: { from: 13, to: 14 }, area_hectares: { from: 350, to: 360 } }),
+        validFrom: v3Time,
+      },
+    });
+    await prisma.twinEvent.create({
+      data: {
+        entityId: presteaMine,
+        type: "updated",
+        title: "Mine expansion detected (v3)",
+        description: "Latest imagery shows additional 10-hectare expansion",
+        severity: "critical",
+        source: "satellite",
+        sourceType: "satellite",
+        payload: JSON.stringify({ fromVersion: 2, toVersion: 3, diff: { production_tons: { from: 13, to: 14 }, area_hectares: { from: 350, to: 360 } } }),
+        timestamp: v3Time,
+      },
+    });
+
+    // Update entity to v3
+    await prisma.twinEntity.update({
+      where: { id: presteaMine },
+      data: { currentVersion: 3, status: "active", metadata: JSON.stringify({ ...ent.metadata, production_tons: 14, area_hectares: 360 }), updatedAt: v3Time },
+    });
+  }
+
+  // Obuasi mine: v1 (270 days ago) → v2 (30 days ago)
+  const obuasiMine = entityKeyToId["mine-obuasi-illegal"];
+  if (obuasiMine) {
+    const ent = TWIN_ENTITIES[7]!;
+    const v2Time = daysAgo(30);
+    await prisma.twinEntityVersion.updateMany({
+      where: { entityId: obuasiMine, version: 1 },
+      data: { validTo: v2Time },
+    });
+    await prisma.twinEntityVersion.create({
+      data: {
+        entityId: obuasiMine,
+        version: 2,
+        snapshot: JSON.stringify({ ...ent, status: "active", metadata: { ...ent.metadata, production_tons: 10, area_hectares: 210 }, version: 2 }),
+        changeReason: "Pit expansion observed during drone survey",
+        diff: JSON.stringify({ production_tons: { from: 8, to: 10 }, area_hectares: { from: 180, to: 210 } }),
+        validFrom: v2Time,
+      },
+    });
+    await prisma.twinEvent.create({
+      data: {
+        entityId: obuasiMine,
+        type: "updated",
+        title: "Obuasi pit expansion (v2)",
+        description: "Drone survey detected 30-hectare pit expansion",
+        severity: "high",
+        source: "drone",
+        sourceType: "sensor",
+        payload: JSON.stringify({ fromVersion: 1, toVersion: 2 }),
+        timestamp: v2Time,
+      },
+    });
+    await prisma.twinEntity.update({
+      where: { id: obuasiMine },
+      data: { currentVersion: 2, metadata: JSON.stringify({ ...ent.metadata, production_tons: 10, area_hectares: 210 }), updatedAt: v2Time },
+    });
+  }
+
+  // Pra River: water quality degradation over time
+  const praRiver = entityKeyToId["river-pra-main"];
+  if (praRiver) {
+    const ent = TWIN_ENTITIES[0]!;
+    const v2Time = daysAgo(90);
+    await prisma.twinEntityVersion.updateMany({
+      where: { entityId: praRiver, version: 1 },
+      data: { validTo: v2Time },
+    });
+    await prisma.twinEntityVersion.create({
+      data: {
+        entityId: praRiver,
+        version: 2,
+        snapshot: JSON.stringify({ ...ent, status: "degraded", metadata: { ...ent.metadata, water_quality: "poor", pollution_level: "critical" }, version: 2 }),
+        changeReason: "Water quality sensors detected critical pollution levels",
+        diff: JSON.stringify({ water_quality: { from: "moderate", to: "poor" }, pollution_level: { from: "high", to: "critical" } }),
+        validFrom: v2Time,
+      },
+    });
+    await prisma.twinEvent.create({
+      data: {
+        entityId: praRiver,
+        type: "status_changed",
+        title: "Pra River water quality critical",
+        description: "Sensor S1 reported mercury levels exceeding safe thresholds",
+        severity: "critical",
+        source: "sensor-pra-s1",
+        sourceType: "sensor",
+        payload: JSON.stringify({ parameter: "mercury", threshold: 0.001, measured: 0.004 }),
+        timestamp: v2Time,
+      },
+    });
+    await prisma.twinEntity.update({
+      where: { id: praRiver },
+      data: { currentVersion: 2, status: "degraded", metadata: JSON.stringify({ ...ent.metadata, water_quality: "poor", pollution_level: "critical" }), updatedAt: v2Time },
+    });
+  }
+
+  // Atewa Forest: canopy density decrease
+  const atewaForest = entityKeyToId["forest-atewa"];
+  if (atewaForest) {
+    const ent = TWIN_ENTITIES[8]!;
+    const v2Time = daysAgo(60);
+    await prisma.twinEntityVersion.updateMany({
+      where: { entityId: atewaForest, version: 1 },
+      data: { validTo: v2Time },
+    });
+    await prisma.twinEntityVersion.create({
+      data: {
+        entityId: atewaForest,
+        version: 2,
+        snapshot: JSON.stringify({ ...ent, status: "threatened", metadata: { ...ent.metadata, canopy_density: 0.78, species_count: 760 }, version: 2 }),
+        changeReason: "Satellite imagery detected canopy loss in northern sector",
+        diff: JSON.stringify({ canopy_density: { from: 0.82, to: 0.78 }, species_count: { from: 765, to: 760 } }),
+        validFrom: v2Time,
+      },
+    });
+    await prisma.twinEvent.create({
+      data: {
+        entityId: atewaForest,
+        type: "depleted",
+        title: "Atewa canopy loss detected",
+        description: "4% canopy density decrease in northern sector",
+        severity: "high",
+        source: "satellite",
+        sourceType: "satellite",
+        payload: JSON.stringify({ canopy_density_delta: -0.04 }),
+        timestamp: v2Time,
+      },
+    });
+    await prisma.twinEntity.update({
+      where: { id: atewaForest },
+      data: { currentVersion: 2, status: "threatened", metadata: JSON.stringify({ ...ent.metadata, canopy_density: 0.78, species_count: 760 }), updatedAt: v2Time },
+    });
+  }
+
+  // Add the recent events (cyanide spill, forest clearing) as event entries
+  // (these are already entities but also create events on affected entities)
+  const cyanideEvent = entityKeyToId["event-cyanide-spill-2024"];
+  if (cyanideEvent && praRiver) {
+    await prisma.twinEvent.create({
+      data: {
+        entityId: praRiver,
+        type: "incident",
+        title: "Cyanide spill reported",
+        description: "Cyanide contamination from illegal mining detected",
+        severity: "critical",
+        source: "community-report",
+        sourceType: "report",
+        payload: JSON.stringify({ impact_area_hectares: 45, verified: true }),
+        timestamp: daysAgo(7),
       },
     });
   }
@@ -764,7 +980,10 @@ async function seedTwinData() {
     relCount++;
   }
 
-  console.log(`[seed] Seeded ${TWIN_ENTITIES.length} twin entities, ${relCount} relationships.`);
+  // Count versions for logging
+  const versionCount = await prisma.twinEntityVersion.count();
+  const eventCount = await prisma.twinEvent.count();
+  console.log(`[seed] Seeded ${TWIN_ENTITIES.length} twin entities, ${relCount} relationships, ${versionCount} versions, ${eventCount} events (temporally spread over 365 days).`);
 }
 
 main()

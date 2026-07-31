@@ -42,14 +42,15 @@ import { DashboardTabs } from "@/components/sentinel/dashboard-tabs";
 import { IdentityDashboard } from "@/components/sentinel/identity-dashboard";
 import { GeospatialDashboard } from "@/components/sentinel/geo/geospatial-dashboard";
 import { TwinDashboard } from "@/components/sentinel/twin/twin-dashboard";
+import { TemporalDashboard } from "@/components/sentinel/twin/temporal-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
-import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE } from "@/modules/twin";
+import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService } from "@/modules/twin";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Fetch ALL dashboard data server-side in parallel (M1 + M2 + M3 + M4).
+  // Fetch ALL dashboard data server-side in parallel (M1 + M2 + M3 + M4 + M5).
   const [
     health,
     flags,
@@ -63,6 +64,7 @@ export default async function DashboardPage() {
     geoLayersRaw,
     twinSummary,
     twinGraphRaw,
+    temporalSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -76,6 +78,7 @@ export default async function DashboardPage() {
     getLayerService().list(),
     getTwinSummaryService().summary(),
     getTwinSummaryService().graph({ limit: 100 }),
+    getTemporalService().temporalSummary(),
   ]);
 
   // Transform twin graph nodes with type colors
@@ -147,7 +150,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M4 · Digital Twin
+                  M5 · Temporal
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -176,13 +179,12 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Digital Twin Core
+                Temporal Engine
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Every environmental object becomes a versioned, related, historical entity —
-                rivers, roads, mines, forests, communities, concessions, protected areas,
-                equipment, inspections, events, and historical imagery — with full version
-                history, graph relationships, and event timelines.
+                Nothing is overwritten. Everything is versioned. Query the state of any entity
+                yesterday, last month, or last year. Compare versions side by side. Replay history
+                day by day. The full bi-temporal audit trail of the Digital Twin.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -197,10 +199,13 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M4: Digital Twin (first child = first tab, default) === */}
+          {/* === M5: Temporal Engine (first child = first tab, default) === */}
+          <TemporalDashboard initialSummary={temporalSummary} />
+
+          {/* === M4: Digital Twin (second child = second tab) === */}
           <TwinDashboard initialSummary={twinSummary} initialGraph={twinGraph} />
 
-          {/* === M3: Geospatial (second child = second tab) === */}
+          {/* === M3: Geospatial (third child = third tab) === */}
           <GeospatialDashboard
             initialSummary={geoSummary}
             initialPois={geoPois}
@@ -208,10 +213,10 @@ export default async function DashboardPage() {
             initialLayers={geoLayers}
           />
 
-          {/* === M2: Identity & Trust (third child = third tab) === */}
+          {/* === M2: Identity & Trust (fourth child = fourth tab) === */}
           <IdentityDashboard initial={identitySummaryRaw} />
 
-          {/* === M1: Foundation (fourth child = fourth tab) === */}
+          {/* === M1: Foundation (fifth child = fifth tab) === */}
           <div>
             {/* KPI row */}
             <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -453,8 +458,12 @@ export default async function DashboardPage() {
                     "M4: Graph Relationships (affects/contains/monitors)",
                     "M4: Event History Timeline",
                     "M4: Historical Imagery & Change Detection",
-                    "M5: Intelligence Engine (next)",
-                    "M6: Community Reporting (next)",
+                    "M5: Temporal Engine (Nothing Overwritten)",
+                    "M5: Time Travel (Yesterday/Month/Year)",
+                    "M5: Version Comparison & Diff",
+                    "M5: History Replay (Day-by-Day)",
+                    "M6: Intelligence Engine (next)",
+                    "M7: Community Reporting (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -473,12 +482,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M4 — Digital Twin</span>
+            <span>Sentinel Platform · M5 — Temporal</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/twin/temporal/summary" className="hover:text-foreground transition-colors">Temporal</Link>
             <Link href="/api/v1/twin/summary" className="hover:text-foreground transition-colors">Twin</Link>
             <Link href="/api/v1/geo/summary" className="hover:text-foreground transition-colors">Geo</Link>
             <Link href="/api/v1/identity-summary" className="hover:text-foreground transition-colors">Identity</Link>
