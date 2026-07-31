@@ -1672,3 +1672,104 @@ model RewardLedger {
   @@index([createdAt])
   @@index([entryHash])
 }
+
+// =============================================================================
+// MILESTONE 21 — Fraud Detection AI
+// =============================================================================
+model FraudAlert {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  type            String
+  severity        String   @default("medium")
+  status          String   @default("detected")
+  title           String
+  description     String
+  confidence      Float    @default(0.5)
+  riskScore       Float    @default(0.5)
+  targetUserId    String?
+  targetUserIds   String?
+  targetEntityIds String?
+  signalCount     Int      @default(0)
+  estimatedImpactGHS Float @default(0)
+  model           String   @default("fraud-ai-v1")
+  detectorVersion String   @default("1.0.0")
+  metadata        String?
+  investigation   FraudInvestigation?
+  signals         FraudSignal[]
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolution      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([severity])
+  @@index([targetUserId])
+  @@index([detectedAt])
+  @@index([confidence])
+}
+
+model FraudSignal {
+  id              String   @id @default(cuid())
+  alertId         String
+  signalType      String
+  detector        String
+  confidence      Float    @default(0.5)
+  weight          Float    @default(0.5)
+  description     String
+  evidence        String?
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  alert           FraudAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+  @@index([signalType])
+  @@index([detector])
+  @@index([confidence])
+}
+
+model FraudInvestigation {
+  id              String   @id @default(cuid())
+  alertId         String   @unique
+  status          String   @default("open")
+  assignedToId    String?
+  openedAt        DateTime @default(now())
+  closedAt        DateTime?
+  findings        String?
+  recommendedAction String?
+  penaltyApplied  Float    @default(0.0)
+  rewardsRevoked  Float    @default(0)
+  userSuspended   Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  alert           FraudAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model UserRiskProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  riskScore       Float    @default(0.0)
+  riskLevel       String   @default("clean")
+  alertCount      Int      @default(0)
+  confirmedAlertCount Int  @default(0)
+  dismissedAlertCount Int  @default(0)
+  signalsByType   String?
+  trustPenalty    Float    @default(0.0)
+  rewardsRevoked  Float    @default(0)
+  factors         String?
+  lastAlertAt     DateTime?
+  lastCalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([riskScore])
+  @@index([riskLevel])
+}

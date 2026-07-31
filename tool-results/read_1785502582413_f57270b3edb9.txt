@@ -1,0 +1,836 @@
+     1→import * as React from "react";
+     2→import Link from "next/link";
+     3→import {
+     4→  ShieldCheck,
+     5→  Activity,
+     6→  Boxes,
+     7→  KeyRound,
+     8→  Flag,
+     9→  ScrollText,
+    10→  GitBranch,
+    11→  Radar,
+    12→  Database,
+    13→  HardDrive,
+    14→  Radio,
+    15→  Cpu,
+    16→  LineChart,
+    17→  Layers,
+    18→  ArrowRight,
+    19→  Lock,
+    20→  Server,
+    21→  GitPullRequestArrow,
+    22→  CheckCircle2,
+    23→  Building2,
+    24→  Users,
+    25→  Smartphone,
+    26→} from "lucide-react";
+    27→
+    28→import { config, safeConfigSnapshot } from "@/config";
+    29→import { getHealthService } from "@/infrastructure/health";
+    30→import { getFeatureFlagService } from "@/modules/feature-flags";
+    31→import { getAuditService } from "@/modules/audit";
+    32→import { getIamService } from "@/modules/iam/application/services/iam.service";
+    33→import { metrics, getTelemetryState } from "@/infrastructure/observability";
+    34→import { db } from "@/lib/db";
+    35→
+    36→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    37→import { Badge } from "@/components/ui/badge";
+    38→import { Separator } from "@/components/ui/separator";
+    39→import { FeatureFlagsPanel } from "@/components/sentinel/feature-flags-panel";
+    40→import { HealthLiveView } from "@/components/sentinel/health-live-view";
+    41→import { DashboardTabs } from "@/components/sentinel/dashboard-tabs";
+    42→import { IdentityDashboard } from "@/components/sentinel/identity-dashboard";
+    43→import { GeospatialDashboard } from "@/components/sentinel/geo/geospatial-dashboard";
+    44→import { TwinDashboard } from "@/components/sentinel/twin/twin-dashboard";
+    45→import { TemporalDashboard } from "@/components/sentinel/twin/temporal-dashboard";
+    46→import { KnowledgeGraphDashboard } from "@/components/sentinel/twin/knowledge-graph-dashboard";
+    47→import { EvidenceDashboard } from "@/components/sentinel/evidence/evidence-dashboard";
+    48→import { IntelligenceDashboard } from "@/components/sentinel/intelligence/intelligence-dashboard";
+    49→import { CorroborationDashboard } from "@/components/sentinel/corroboration/corroboration-dashboard";
+    50→import { TrustDashboard } from "@/components/sentinel/trust/trust-dashboard";
+    51→import { NotificationDashboard } from "@/components/sentinel/notifications/notification-dashboard";
+    52→import { SatelliteDashboard } from "@/components/sentinel/satellite/satellite-dashboard";
+    53→import { CVDashboard } from "@/components/sentinel/cv/cv-dashboard";
+    54→import { ObservationDashboard } from "@/components/sentinel/ai-observations/observation-dashboard";
+    55→import { FusionDashboard } from "@/components/sentinel/fusion/fusion-dashboard";
+    56→import { PredictionDashboard } from "@/components/sentinel/predictions/prediction-dashboard";
+    57→import { HotspotDashboard } from "@/components/sentinel/hotspots/hotspot-dashboard";
+    58→import { CopilotDashboard } from "@/components/sentinel/copilot/copilot-dashboard";
+    59→import { MissionDashboard } from "@/components/sentinel/missions/mission-dashboard";
+    60→import { RewardDashboard } from "@/components/sentinel/rewards/reward-dashboard";
+    61→import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
+    62→import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
+    63→import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
+    64→import { getCivilTrustService } from "@/modules/trust";
+    65→import { getIntelligenceService } from "@/modules/intelligence";
+    66→import { getNotificationService } from "@/modules/notifications";
+    67→import { getSatelliteIngestionService } from "@/modules/satellite";
+    68→import { getCVService } from "@/modules/cv";
+    69→import { getObservationService } from "@/modules/ai-observations";
+    70→import { getFusionService } from "@/modules/fusion";
+    71→import { getPredictionService } from "@/modules/predictions";
+    72→import { getHotspotService } from "@/modules/hotspots";
+    73→import { getCopilotService } from "@/modules/copilot";
+    74→import { getMissionService } from "@/modules/missions";
+    75→import { getRewardService } from "@/modules/rewards";
+    76→
+    77→export const dynamic = "force-dynamic";
+    78→export const revalidate = 0;
+    79→
+    80→export default async function DashboardPage() {
+    81→  // Fetch ALL dashboard data server-side in parallel (M1–M10).
+    82→  const [
+    83→    health,
+    84→    flags,
+    85→    audit,
+    86→    roles,
+    87→    telemetry,
+    88→    identitySummaryRaw,
+    89→    geoSummary,
+    90→    geoPoisRaw,
+    91→    geoRegionsRaw,
+    92→    geoLayersRaw,
+    93→    twinSummary,
+    94→    twinGraphRaw,
+    95→    temporalSummary,
+    96→    kgAnalytics,
+    97→    evidenceSummary,
+    98→    intelSummary,
+    99→    corroborationSummary,
+   100→    trustSummary,
+   101→    notificationSummary,
+   102→    satelliteSummary,
+   103→    cvSummary,
+   104→    observationSummary,
+   105→    fusionSummary,
+   106→    predictionSummary,
+   107→    hotspotSummary,
+   108→    copilotSummary,
+   109→    missionSummary,
+   110→    rewardSummary,
+   111→  ] = await Promise.all([
+   112→    getHealthService().runAll(),
+   113→    getFeatureFlagService().list(),
+   114→    getAuditService().list({ limit: 12 }),
+   115→    getIamService().listRoles(),
+   116→    Promise.resolve(getTelemetryState()),
+   117→    fetchIdentitySummary(),
+   118→    getSpatialQueryService().summary(),
+   119→    getPOIService().list({ limit: 500 }),
+   120→    getRegionService().list(),
+   121→    getLayerService().list(),
+   122→    getTwinSummaryService().summary(),
+   123→    getTwinSummaryService().graph({ limit: 100 }),
+   124→    getTemporalService().temporalSummary(),
+   125→    getKnowledgeGraphService().analytics(),
+   126→    getEvidenceService().summary(),
+   127→    getIntelligenceService().summary(),
+   128→    getCorroborationService().summary(),
+   129→    getCivilTrustService().summary(),
+   130→    getNotificationService().summary(),
+   131→    getSatelliteIngestionService().summary(),
+   132→    getCVService().summary(),
+   133→    getObservationService().summary(),
+   134→    getFusionService().summary(),
+   135→    getPredictionService().summary(),
+   136→    getHotspotService().summary(),
+   137→    getCopilotService().summary(),
+   138→    getMissionService().summary(),
+   139→    getRewardService().summary(),
+   140→  ]);
+   141→
+   142→  // Transform KG graph nodes with type colors
+   143→  const kgGraph = {
+   144→    nodes: kgAnalytics.graph.nodes.map((n) => ({
+   145→      ...n,
+   146→      color: ENTITY_TYPE_CATALOGUE.find((t) => t.type === n.type)?.color ?? "#6b7280",
+   147→    })),
+   148→    edges: kgAnalytics.graph.edges,
+   149→    stats: kgAnalytics.graph.stats,
+   150→  };
+   151→
+   152→  // Transform twin graph nodes with type colors
+   153→  const twinGraph = {
+   154→    nodes: twinGraphRaw.nodes.map((n) => ({
+   155→      ...n,
+   156→      color: ENTITY_TYPE_CATALOGUE.find((t) => t.type === n.type)?.color ?? "#6b7280",
+   157→    })),
+   158→    edges: twinGraphRaw.edges,
+   159→    stats: twinGraphRaw.stats,
+   160→  };
+   161→
+   162→  // Transform geo data for the map client component
+   163→  const geoPois = geoPoisRaw.pois.map((p) => ({
+   164→    id: p.id,
+   165→    name: p.name,
+   166→    type: p.type,
+   167→    lat: p.lat,
+   168→    lng: p.lng,
+   169→    status: p.status,
+   170→    severity: p.severity,
+   171→  }));
+   172→  const geoRegions = geoRegionsRaw.regions
+   173→    .filter((r) => r.geojson?.geometry?.type === "Polygon")
+   174→    .map((r) => ({
+   175→      id: r.id,
+   176→      name: r.name,
+   177→      type: r.type,
+   178→      coordinates: r.geojson!.geometry.coordinates[0] as [number, number][],
+   179→      areaKm2: r.areaKm2,
+   180→    }));
+   181→  const geoLayers = geoLayersRaw.layers.map((l) => ({
+   182→    key: l.key,
+   183→    name: l.name,
+   184→    type: l.type,
+   185→    visible: l.visible,
+   186→    opacity: l.opacity,
+   187→  }));
+   188→
+   189→  const metricsSnapshot = metrics.snapshot();
+   190→  const safeConfig = safeConfigSnapshot();
+   191→
+   192→  const outboxPending = await db.outboxEvent
+   193→    .count({ where: { status: "pending" } })
+   194→    .catch(() => 0);
+   195→  const jobDepth = await db.jobRecord
+   196→    .count({ where: { status: "queued" } })
+   197→    .catch(() => 0);
+   198→
+   199→  const subsystems = [
+   200→    { icon: Database, name: "Database", provider: String(safeConfig.DATABASE_PROVIDER), target: "PostgreSQL + PostGIS", detail: "Prisma ORM · transactional outbox" },
+   201→    { icon: HardDrive, name: "Object Storage", provider: String(safeConfig.STORAGE_PROVIDER), target: "S3 / MinIO / R2", detail: "Provider-agnostic port" },
+   202→    { icon: Radio, name: "Event Bus", provider: String(safeConfig.EVENT_BUS_PROVIDER), target: "Redis Pub/Sub · NATS", detail: "Domain events · outbox relay" },
+   203→    { icon: Cpu, name: "Background Jobs", provider: String(safeConfig.JOB_QUEUE_PROVIDER), target: "BullMQ (Redis)", detail: "Durable · retries · backoff" },
+   204→    { icon: KeyRound, name: "Authentication", provider: (safeConfig.AUTH_PROVIDERS as string[])?.join(", ") ?? "credentials", target: "NextAuth.js v4 · JWT", detail: "OAuth-ready (Google/GitHub/Azure)" },
+   205→    { icon: Flag, name: "Feature Flags", provider: String(safeConfig.FEATURE_FLAG_PROVIDER), target: "boolean · % · segment · env", detail: "Cached evaluation engine" },
+   206→  ];
+   207→
+   208→  return (
+   209→    <div className="flex min-h-screen flex-col bg-background">
+   210→      {/* Header */}
+   211→      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+   212→        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6">
+   213→          <div className="flex items-center gap-3">
+   214→            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+   215→              <ShieldCheck className="h-5 w-5" />
+   216→            </div>
+   217→            <div className="leading-tight">
+   218→              <div className="flex items-center gap-2">
+   219→                <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
+   220→                <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
+   221→                  M20 · Reward Engine
+   222→                </Badge>
+   223→              </div>
+   224→              <p className="text-[11px] text-muted-foreground hidden sm:block">
+   225→                Community Intelligence &amp; Digital Twin Platform
+   226→              </p>
+   227→            </div>
+   228→          </div>
+   229→          <div className="flex items-center gap-2 sm:gap-3">
+   230→            <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+   231→              {config.NODE_ENV}
+   232→            </Badge>
+   233→            <Badge variant="outline" className="text-[10px] font-mono">
+   234→              v{config.NEXT_PUBLIC_APP_VERSION}
+   235→            </Badge>
+   236→            <Badge variant="outline" className="text-[10px] font-mono">
+   237→              API {config.NEXT_PUBLIC_API_VERSION}
+   238→            </Badge>
+   239→          </div>
+   240→        </div>
+   241→      </header>
+   242→
+   243→      {/* Main */}
+   244→      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 sm:py-8">
+   245→        {/* Hero */}
+   246→        <section className="mb-8">
+   247→          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+   248→            <div>
+   249→              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+   250→                Reward Engine
+   251→              </h2>
+   252→              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+   253→                Production trust system replacing reputation. Tracks accuracy, reliability,
+   254→                false reports, evidence quality, contribution quality, community impact.
+   255→                Trust decays with inactivity (90-day half-life) and is fraud-resistant.
+   256→                Automated detection of duplicate spam, false reports, coordinated manipulation,
+   257→                and bot behavior.
+   258→              </p>
+   259→            </div>
+   260→            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   261→              <span className="inline-flex items-center gap-1.5">
+   262→                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+   263→                Live
+   264→              </span>
+   265→              <span>·</span>
+   266→              <span>auto-refresh 30s</span>
+   267→            </div>
+   268→          </div>
+   269→        </section>
+   270→
+   271→        <DashboardTabs>
+   272→          {/* === M10: Reward Engine (first child = first tab, default) === */}
+   273→          <RewardDashboard initialSummary={rewardSummary} />
+   274→
+   275→          {/* === M19: Mission System (second child = second tab) === */}
+   276→          <MissionDashboard initialSummary={missionSummary} />
+   277→
+   278→          {/* === M18: Digital Twin AI Copilot (second child = second tab) === */}
+   279→          <CopilotDashboard initialSummary={copilotSummary} />
+   280→
+   281→          {/* === M17: Prediction Engine (second child = second tab) === */}
+   282→          <HotspotDashboard initialSummary={hotspotSummary} />
+   283→
+   284→          {/* === M16: Environmental Intelligence (second child = second tab) === */}
+   285→          <PredictionDashboard initialSummary={predictionSummary} />
+   286→
+   287→          {/* === M15: Evidence Fusion Engine (second child = second tab) === */}
+   288→          <FusionDashboard initialSummary={fusionSummary} />
+   289→
+   290→          {/* === M14: AI Observation Engine (second child = second tab) === */}
+   291→          <ObservationDashboard initialSummary={observationSummary} />
+   292→
+   293→          {/* === M13: Computer Vision Platform (second child = second tab) === */}
+   294→          <CVDashboard initialSummary={cvSummary} />
+   295→
+   296→          {/* === M12: Satellite Ingestion (second child = second tab) === */}
+   297→          <SatelliteDashboard initialSummary={satelliteSummary} />
+   298→
+   299→          {/* === M11: Notification Platform (second child = second tab) === */}
+   300→          <NotificationDashboard initialSummary={notificationSummary} />
+   301→
+   302→          {/* === M10: Civil Trust Engine (second child = second tab) === */}
+   303→          <TrustDashboard initialSummary={trustSummary} />
+   304→
+   305→          {/* === M9: Corroboration Engine (second child = second tab) === */}
+   306→          <CorroborationDashboard initialSummary={corroborationSummary} />
+   307→
+   308→          {/* === M8: Community Intelligence (third child = second tab) === */}
+   309→          <IntelligenceDashboard initialSummary={intelSummary} />
+   310→
+   311→          {/* === M7: Evidence Platform (fourth child = third tab) === */}
+   312→          <EvidenceDashboard initialSummary={evidenceSummary} />
+   313→
+   314→          {/* === M6: Knowledge Graph (fifth child = fourth tab) === */}
+   315→          <KnowledgeGraphDashboard initialAnalytics={kgAnalytics} initialGraph={kgGraph} />
+   316→
+   317→          {/* === M5: Temporal Engine (sixth child = fifth tab) === */}
+   318→          <TemporalDashboard initialSummary={temporalSummary} />
+   319→
+   320→          {/* === M4: Digital Twin (seventh child = sixth tab) === */}
+   321→          <TwinDashboard initialSummary={twinSummary} initialGraph={twinGraph} />
+   322→
+   323→          {/* === M3: Geospatial (eighth child = seventh tab) === */}
+   324→          <GeospatialDashboard
+   325→            initialSummary={geoSummary}
+   326→            initialPois={geoPois}
+   327→            initialRegions={geoRegions}
+   328→            initialLayers={geoLayers}
+   329→          />
+   330→
+   331→          {/* === M2: Identity & Trust (ninth child = eighth tab) === */}
+   332→          <IdentityDashboard initial={identitySummaryRaw} />
+   333→
+   334→          {/* === M1: Foundation (tenth child = ninth tab) === */}
+   335→          <div>
+   336→            {/* KPI row */}
+   337→            <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+   338→              <Kpi icon={Boxes} label="Subsystems" value={String(subsystems.length)} hint="operational" />
+   339→              <Kpi icon={Layers} label="Bounded Contexts" value="6" hint="iam · audit · flags · identity · geo · twin" />
+   340→              <Kpi icon={KeyRound} label="RBAC Roles" value={String(roles.length)} hint="seeded" />
+   341→              <Kpi icon={Flag} label="Feature Flags" value={String(flags.length)} hint={`${flags.filter((f) => f.enabled).length} active`} />
+   342→              <Kpi icon={GitBranch} label="Outbox Pending" value={String(outboxPending)} hint="events" />
+   343→              <Kpi icon={Activity} label="Job Queue" value={String(jobDepth)} hint="queued" />
+   344→            </section>
+   345→
+   346→            {/* Health (live) */}
+   347→            <Card className="mb-6">
+   348→              <CardHeader className="pb-3">
+   349→                <div className="flex items-center gap-2">
+   350→                  <Activity className="h-4 w-4 text-primary" />
+   351→                  <CardTitle className="text-sm">System Health &amp; Readiness</CardTitle>
+   352→                </div>
+   353→              </CardHeader>
+   354→              <CardContent>
+   355→                <HealthLiveView
+   356→                  initialChecks={health.checks}
+   357→                  initialStatus={health.status}
+   358→                  initialUptime={health.uptime}
+   359→                />
+   360→              </CardContent>
+   361→            </Card>
+   362→
+   363→            {/* Subsystems + flags */}
+   364→            <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+   365→              <Card className="lg:col-span-2">
+   366→                <CardHeader className="pb-3">
+   367→                  <div className="flex items-center gap-2">
+   368→                    <Boxes className="h-4 w-4 text-primary" />
+   369→                    <CardTitle className="text-sm">Subsystem Architecture</CardTitle>
+   370→                  </div>
+   371→                </CardHeader>
+   372→                <CardContent>
+   373→                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+   374→                    {subsystems.map((s) => (
+   375→                      <div key={s.name} className="rounded-lg border border-border bg-card/50 p-3.5">
+   376→                        <div className="flex items-center gap-2.5">
+   377→                          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+   378→                            <s.icon className="h-4 w-4" />
+   379→                          </div>
+   380→                          <div className="min-w-0">
+   381→                            <p className="text-sm font-medium leading-none">{s.name}</p>
+   382→                            <p className="text-[10px] text-muted-foreground mt-1 truncate">{s.detail}</p>
+   383→                          </div>
+   384→                        </div>
+   385→                        <Separator className="my-2.5" />
+   386→                        <div className="flex items-center justify-between text-[11px]">
+   387→                          <div>
+   388→                            <p className="text-muted-foreground uppercase tracking-wide">Active</p>
+   389→                            <code className="font-mono text-foreground">{s.provider}</code>
+   390→                          </div>
+   391→                          <div className="text-right">
+   392→                            <p className="text-muted-foreground uppercase tracking-wide">Prod target</p>
+   393→                            <code className="font-mono text-foreground">{s.target}</code>
+   394→                          </div>
+   395→                        </div>
+   396→                      </div>
+   397→                    ))}
+   398→                  </div>
+   399→                </CardContent>
+   400→              </Card>
+   401→
+   402→              <Card>
+   403→                <CardContent className="pt-6">
+   404→                  <FeatureFlagsPanel initialFlags={flags} />
+   405→                </CardContent>
+   406→              </Card>
+   407→            </div>
+   408→
+   409→            {/* Audit + RBAC */}
+   410→            <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+   411→              <Card>
+   412→                <CardHeader className="pb-3">
+   413→                  <div className="flex items-center justify-between">
+   414→                    <div className="flex items-center gap-2">
+   415→                      <ScrollText className="h-4 w-4 text-primary" />
+   416→                      <CardTitle className="text-sm">Audit Log</CardTitle>
+   417→                    </div>
+   418→                    <Badge variant="outline" className="text-[10px]">tamper-evident · {audit.total}</Badge>
+   419→                  </div>
+   420→                </CardHeader>
+   421→                <CardContent>
+   422→                  <div className="max-h-80 overflow-y-auto -mr-2 pr-2 space-y-1.5">
+   423→                    {audit.entries.length === 0 && (
+   424→                      <p className="py-8 text-center text-xs text-muted-foreground">No audit entries yet.</p>
+   425→                    )}
+   426→                    {audit.entries.map((entry) => (
+   427→                      <div key={entry.id} className="flex items-start gap-2.5 rounded-md border border-border/60 bg-card/40 p-2.5">
+   428→                        <div className={"mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full " + (entry.outcome === "success" ? "bg-success" : entry.outcome === "failure" ? "bg-destructive" : "bg-warning")} />
+   429→                        <div className="min-w-0 flex-1">
+   430→                          <div className="flex items-center justify-between gap-2">
+   431→                            <code className="truncate text-xs font-mono">{entry.action}</code>
+   432→                            <span className="flex-shrink-0 text-[10px] text-muted-foreground tabular-nums">
+   433→                              {new Date(entry.timestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+   434→                            </span>
+   435→                          </div>
+   436→                          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+   437→                            {entry.actorType} · {entry.resource}{entry.resourceId ? `:${entry.resourceId.slice(0, 8)}` : ""}{entry.ipAddress ? ` · ${entry.ipAddress}` : ""}
+   438→                          </p>
+   439→                        </div>
+   440→                      </div>
+   441→                    ))}
+   442→                  </div>
+   443→                </CardContent>
+   444→              </Card>
+   445→
+   446→              <Card>
+   447→                <CardHeader className="pb-3">
+   448→                  <div className="flex items-center gap-2">
+   449→                    <KeyRound className="h-4 w-4 text-primary" />
+   450→                    <CardTitle className="text-sm">RBAC Explorer</CardTitle>
+   451→                  </div>
+   452→                </CardHeader>
+   453→                <CardContent>
+   454→                  <div className="max-h-80 overflow-y-auto -mr-2 pr-2 space-y-2">
+   455→                    {roles.map((role) => (
+   456→                      <div key={role.id} className="rounded-lg border border-border bg-card/50 p-3">
+   457→                        <div className="flex items-center justify-between">
+   458→                          <div className="flex items-center gap-2">
+   459→                            <code className="text-xs font-mono font-medium">{role.key}</code>
+   460→                            {role.isSystem && <Badge variant="secondary" className="text-[9px] uppercase">system</Badge>}
+   461→                          </div>
+   462→                          <span className="text-[10px] text-muted-foreground tabular-nums">{role.userCount} users</span>
+   463→                        </div>
+   464→                        <p className="text-[11px] text-muted-foreground mt-0.5">{role.name}</p>
+   465→                        <div className="mt-2 flex flex-wrap gap-1">
+   466→                          {role.permissions.slice(0, 6).map((p) => (
+   467→                            <span key={p.key} className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[9px] font-mono">{p.key}</span>
+   468→                          ))}
+   469→                          {role.permissions.length > 6 && (
+   470→                            <span className="text-[9px] text-muted-foreground">+{role.permissions.length - 6} more</span>
+   471→                          )}
+   472→                        </div>
+   473→                      </div>
+   474→                    ))}
+   475→                  </div>
+   476→                </CardContent>
+   477→              </Card>
+   478→            </div>
+   479→
+   480→            {/* Architecture + API directory */}
+   481→            <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+   482→              <Card>
+   483→                <CardHeader className="pb-3">
+   484→                  <div className="flex items-center gap-2">
+   485→                    <Layers className="h-4 w-4 text-primary" />
+   486→                    <CardTitle className="text-sm">Architecture — DDD + Event Driven</CardTitle>
+   487→                  </div>
+   488→                </CardHeader>
+   489→                <CardContent>
+   490→                  <ArchitectureMap />
+   491→                </CardContent>
+   492→              </Card>
+   493→              <Card>
+   494→                <CardHeader className="pb-3">
+   495→                  <div className="flex items-center gap-2">
+   496→                    <GitPullRequestArrow className="h-4 w-4 text-primary" />
+   497→                    <CardTitle className="text-sm">API Directory</CardTitle>
+   498→                  </div>
+   499→                </CardHeader>
+   500→                <CardContent>
+   501→                  <ApiDirectory />
+   502→                </CardContent>
+   503→              </Card>
+   504→            </div>
+   505→
+   506→            {/* Observability */}
+   507→            <Card className="mb-6">
+   508→              <CardHeader className="pb-3">
+   509→                <div className="flex items-center justify-between">
+   510→                  <div className="flex items-center gap-2">
+   511→                    <LineChart className="h-4 w-4 text-primary" />
+   512→                    <CardTitle className="text-sm">Observability</CardTitle>
+   513→                  </div>
+   514→                  <div className="flex items-center gap-2">
+   515→                    <Badge variant={telemetry.tracesActive ? "default" : "secondary"} className="text-[10px]">
+   516→                      Traces {telemetry.tracesActive ? "ON" : "OFF"}
+   517→                    </Badge>
+   518→                    <Badge variant={telemetry.metricsActive ? "default" : "secondary"} className="text-[10px]">
+   519→                      Metrics {telemetry.metricsActive ? "ON" : "OFF"}
+   520→                    </Badge>
+   521→                  </div>
+   522→                </div>
+   523→              </CardHeader>
+   524→              <CardContent>
+   525→                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+   526→                  {metricsSnapshot.filter((m) => m.samples.length > 0).slice(0, 8).map((m) => (
+   527→                    <div key={m.name} className="rounded-lg border border-border bg-card/50 p-3">
+   528→                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{m.name}</p>
+   529→                      <p className="mt-1 text-lg font-semibold tabular-nums">{m.samples.reduce((a, s) => a + s.value, 0)}</p>
+   530→                      <p className="text-[10px] text-muted-foreground capitalize">{m.type}</p>
+   531→                    </div>
+   532→                  ))}
+   533→                  {metricsSnapshot.filter((m) => m.samples.length > 0).length === 0 && (
+   534→                    <div className="col-span-full py-8 text-center text-xs text-muted-foreground">
+   535→                      Metrics populate as the platform handles requests.
+   536→                    </div>
+   537→                  )}
+   538→                </div>
+   539→              </CardContent>
+   540→            </Card>
+   541→
+   542→            {/* Checklist */}
+   543→            <Card>
+   544→              <CardHeader className="pb-3">
+   545→                <div className="flex items-center gap-2">
+   546→                  <CheckCircle2 className="h-4 w-4 text-success" />
+   547→                  <CardTitle className="text-sm">Milestones Checklist</CardTitle>
+   548→                </div>
+   549→              </CardHeader>
+   550→              <CardContent>
+   551→                <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+   552→                  {[
+   553→                    "M1: Monorepo · DDD · EDA",
+   554→                    "M1: Next.js App Router · TS",
+   555→                    "M1: PostgreSQL + PostGIS · Prisma",
+   556→                    "M1: Object Storage · Jobs · Event Bus",
+   557→                    "M1: Authentication · RBAC · Audit",
+   558→                    "M1: Feature Flags · Observability · Health",
+   559→                    "M1: API versioning · Config · Secrets",
+   560→                    "M1: Docker · CI/CD · Tests",
+   561→                    "M2: Organizations (Gov/NGO/Researcher)",
+   562→                    "M2: Members · Invitations · Roles",
+   563→                    "M2: Identity Verification workflow",
+   564→                    "M2: Trust Profile · Score · Badges",
+   565→                    "M2: Device Management",
+   566→                    "M2: Session Management",
+   567→                    "M2: Role Switching",
+   568→                    "M3: PostGIS · Spatial Queries · Indexing",
+   569→                    "M3: Map Rendering · Layers · Tiles",
+   570→                    "M3: Coordinate Transforms · Quadkeys",
+   571→                    "M3: Distance · Polygon · Nearest-Neighbor",
+   572→                    "M4: Versioned Entities (River/Road/Mine/Forest)",
+   573→                    "M4: Graph Relationships (affects/contains/monitors)",
+   574→                    "M4: Event History Timeline",
+   575→                    "M4: Historical Imagery & Change Detection",
+   576→                    "M5: Temporal Engine (Nothing Overwritten)",
+   577→                    "M5: Time Travel (Yesterday/Month/Year)",
+   578→                    "M5: Version Comparison & Diff",
+   579→                    "M5: History Replay (Day-by-Day)",
+   580→                    "M6: Knowledge Graph · Graph Traversal",
+   581→                    "M6: Shortest Path · Connected Components",
+   582→                    "M6: Degree Centrality · Relationship Matrix",
+   583→                    "M6: Typed Templates (River→Community, Mine→River)",
+   584→                    "M7: Universal Evidence (Image/Video/Audio/Doc/GPS)",
+   585→                    "M7: SHA-256 Hashing + Hash Chain Tamper Detection",
+   586→                    "M7: AES-256-GCM Encryption + KMS Keys",
+   587→                    "M7: GPS Tagging + Metadata + Version History",
+   588→                    "M8: Community Intelligence (Event-Sourced)",
+   589→                    "M8: Subscribe · Watch · Follow · Share · Comment",
+   590→                    "M8: Append-Only Event Stream · Projection Fold",
+   591→                    "M8: Evidence Attachment + Threaded Comments",
+   592→                    "M9: Corroboration Engine (Support/Dispute)",
+   593→                    "M9: Independent Corroboration + Duplicate Detection",
+   594→                    "M9: Witness Confidence + Evidence Weighting",
+   595→                    "M9: 5-Tier System (Unverified→Confirmed)",
+   596→                    "M10: Reward Engine (8-Factor)",
+   597→                    "M10: Accuracy · Reliability · False Reports",
+   598→                    "M10: Evidence Quality · Contribution Quality · Impact",
+   599→                    "M10: Decay (90-day half-life) · Fraud Resistance",
+   600→                    "M21: Intelligence Engine (next)",
+   601→                    "M22: Predictive Analytics (next)",
+   602→                  ].map((item) => (
+   603→                    <div key={item} className="flex items-center gap-2 text-xs">
+   604→                      <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
+   605→                      <span className="text-foreground/80">{item}</span>
+   606→                    </div>
+   607→                  ))}
+   608→                </div>
+   609→              </CardContent>
+   610→            </Card>
+   611→          </div>
+   612→        </DashboardTabs>
+   613→      </main>
+   614→
+   615→      {/* Footer */}
+   616→      <footer className="mt-auto border-t border-border bg-card/30">
+   617→        <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
+   618→          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   619→            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+   620→            <span>Sentinel Platform · M16 — Reward Engine</span>
+   621→          </div>
+   622→          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+   623→            <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
+   624→            <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
+   625→            <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+   626→            <Link href="/api/v1/rewards/summary" className="hover:text-foreground transition-colors">Rewards</Link>
+   627→            <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
+   628→            <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
+   629→            <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>
+   630→            <Link href="/api/v1/twin/temporal/summary" className="hover:text-foreground transition-colors">Temporal</Link>
+   631→            <Link href="/api/v1/twin/summary" className="hover:text-foreground transition-colors">Twin</Link>
+   632→            <Link href="/api/v1/geo/summary" className="hover:text-foreground transition-colors">Geo</Link>
+   633→            <Link href="/api/v1/identity-summary" className="hover:text-foreground transition-colors">Identity</Link>
+   634→            <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Secrets redacted</span>
+   635→          </div>
+   636→        </div>
+   637→      </footer>
+   638→    </div>
+   639→  );
+   640→}
+   641→
+   642→// ---------------------------------------------------------------------------
+   643→// Server-side data fetch for the identity summary (inline to avoid an extra
+   644→// HTTP roundtrip on first render).
+   645→// ---------------------------------------------------------------------------
+   646→
+   647→async function fetchIdentitySummary() {
+   648→  const [
+   649→    organizationsByType,
+   650→    organizationsByStatus,
+   651→    totalMembers,
+   652→    totalDevices,
+   653→    trustedDevices,
+   654→    verificationsByStatus,
+   655→    verificationsByType,
+   656→    trustTiers,
+   657→    topTrustProfiles,
+   658→    recentVerifications,
+   659→    recentOrgs,
+   660→  ] = await Promise.all([
+   661→    db.organization.groupBy({ by: ["type"], _count: true }),
+   662→    db.organization.groupBy({ by: ["status"], _count: true }),
+   663→    db.organizationMember.count({ where: { status: "active" } }),
+   664→    db.device.count(),
+   665→    db.device.count({ where: { status: "trusted" } }),
+   666→    db.identityVerification.groupBy({ by: ["status"], _count: true }),
+   667→    db.identityVerification.groupBy({ by: ["type"], _count: true }),
+   668→    db.trustProfile.groupBy({ by: ["tier"], _count: true }),
+   669→    db.trustProfile.findMany({
+   670→      take: 5,
+   671→      orderBy: { score: "desc" },
+   672→      include: { user: { select: { id: true, email: true, name: true, image: true } } },
+   673→    }),
+   674→    db.identityVerification.findMany({
+   675→      take: 8,
+   676→      orderBy: { submittedAt: "desc" },
+   677→      include: { user: { select: { id: true, email: true, name: true } } },
+   678→    }),
+   679→    db.organization.findMany({
+   680→      take: 8,
+   681→      orderBy: { createdAt: "desc" },
+   682→      include: { _count: { select: { members: true } } },
+   683→    }),
+   684→  ]);
+   685→
+   686→  return {
+   687→    organizations: {
+   688→      byType: organizationsByType.map((g) => ({ type: g.type, count: g._count })),
+   689→      byStatus: organizationsByStatus.map((g) => ({ status: g.status, count: g._count })),
+   690→      total: organizationsByType.reduce((s, g) => s + g._count, 0),
+   691→    },
+   692→    members: { total: totalMembers },
+   693→    devices: { total: totalDevices, trusted: trustedDevices, untrusted: totalDevices - trustedDevices },
+   694→    verifications: {
+   695→      byStatus: verificationsByStatus.map((g) => ({ status: g.status, count: g._count })),
+   696→      byType: verificationsByType.map((g) => ({ type: g.type, count: g._count })),
+   697→      total: verificationsByStatus.reduce((s, g) => s + g._count, 0),
+   698→    },
+   699→    trust: {
+   700→      byTier: trustTiers.map((g) => ({ tier: g.tier, count: g._count })),
+   701→      topProfiles: topTrustProfiles.map((p) => ({
+   702→        userId: p.userId,
+   703→        score: p.score,
+   704→        tier: p.tier,
+   705→        badges: p.badges ? JSON.parse(p.badges) : [],
+   706→        user: p.user,
+   707→      })),
+   708→    },
+   709→    recent: {
+   710→      verifications: recentVerifications.map((v) => ({
+   711→        id: v.id,
+   712→        type: v.type,
+   713→        status: v.status,
+   714→        submittedAt: v.submittedAt,
+   715→        user: v.user,
+   716→      })),
+   717→      organizations: recentOrgs.map((o) => ({
+   718→        id: o.id,
+   719→        key: o.key,
+   720→        name: o.name,
+   721→        type: o.type,
+   722→        status: o.status,
+   723→        country: o.country,
+   724→        memberCount: o._count.members,
+   725→        createdAt: o.createdAt,
+   726→      })),
+   727→    },
+   728→  };
+   729→}
+   730→
+   731→// ---------------------------------------------------------------------------
+   732→
+   733→function Kpi({
+   734→  icon: Icon,
+   735→  label,
+   736→  value,
+   737→  hint,
+   738→}: {
+   739→  icon: React.ComponentType<{ className?: string }>;
+   740→  label: string;
+   741→  value: string;
+   742→  hint?: string;
+   743→}) {
+   744→  return (
+   745→    <div className="rounded-lg border border-border bg-card p-3">
+   746→      <div className="flex items-center justify-between">
+   747→        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+   748→        {hint && (
+   749→          <span className="text-[9px] text-muted-foreground uppercase tracking-wide">{hint}</span>
+   750→        )}
+   751→      </div>
+   752→      <p className="mt-2 text-xl font-bold tabular-nums leading-none">{value}</p>
+   753→      <p className="mt-1 text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+   754→    </div>
+   755→  );
+   756→}
+   757→
+   758→function ArchitectureMap() {
+   759→  const layers = [
+   760→    { title: "Presentation", icon: Server, color: "text-chart-1", items: ["Next.js App Router", "Server Components", "API Routes (v1)"] },
+   761→    { title: "Application", icon: Radar, color: "text-chart-2", items: ["Use-case Services", "DTOs / Mappers", "RBAC Guards"] },
+   762→    { title: "Domain", icon: Layers, color: "text-chart-3", items: ["Aggregate Roots", "Value Objects", "Domain Events"] },
+   763→    { title: "Infrastructure", icon: HardDrive, color: "text-chart-4", items: ["Prisma Repos", "Event Bus", "Storage · Jobs"] },
+   764→  ];
+   765→  return (
+   766→    <div className="space-y-2.5">
+   767→      {layers.map((layer, i) => (
+   768→        <div key={layer.title}>
+   769→          <div className="flex items-center gap-3 rounded-lg border border-border bg-card/50 p-2.5">
+   770→            <div className={"flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted " + layer.color}>
+   771→              <layer.icon className="h-4 w-4" />
+   772→            </div>
+   773→            <div className="min-w-0 flex-1">
+   774→              <p className="text-xs font-semibold leading-none">{layer.title}</p>
+   775→              <div className="mt-1.5 flex flex-wrap gap-1">
+   776→                {layer.items.map((item) => (
+   777→                  <span key={item} className="inline-flex items-center rounded bg-muted/60 px-1.5 py-0.5 text-[9px] font-mono">{item}</span>
+   778→                ))}
+   779→              </div>
+   780→            </div>
+   781→          </div>
+   782→          {i < layers.length - 1 && (
+   783→            <div className="ml-6 flex h-3 items-center">
+   784→              <ArrowRight className="h-3 w-3 rotate-90 text-muted-foreground/50" />
+   785→            </div>
+   786→          )}
+   787→        </div>
+   788→      ))}
+   789→      <div className="mt-3 rounded-md bg-primary/5 p-2.5 text-[10px] text-muted-foreground">
+   790→        <span className="font-medium text-foreground">Pattern:</span> Transactional Outbox · CQRS read models · Ports &amp; Adapters · Domain events flow: Aggregate → Outbox (same tx) → Relay → Event Bus → Audit handler + projectors.
+   791→      </div>
+   792→    </div>
+   793→  );
+   794→}
+   795→
+   796→function ApiDirectory() {
+   797→  const endpoints = [
+   798→    { method: "GET", path: "/api/v1/health", auth: false, desc: "Liveness probe" },
+   799→    { method: "GET", path: "/api/v1/readiness", auth: false, desc: "Readiness (all checks)" },
+   800→    { method: "GET", path: "/api/v1/system", auth: false, desc: "Architecture overview" },
+   801→    { method: "GET", path: "/api/v1/info", auth: false, desc: "API versioning directory" },
+   802→    { method: "GET", path: "/api/v1/identity-summary", auth: false, desc: "Identity platform metrics" },
+   803→    { method: "GET", path: "/api/v1/organizations", auth: true, desc: "List organizations" },
+   804→    { method: "GET", path: "/api/v1/devices", auth: true, desc: "List devices" },
+   805→    { method: "GET", path: "/api/v1/verifications", auth: true, desc: "List verifications" },
+   806→    { method: "GET", path: "/api/v1/trust", auth: true, desc: "Trust leaderboard" },
+   807→    { method: "GET", path: "/api/v1/role-switch", auth: true, desc: "Active role + history" },
+   808→  ];
+   809→  return (
+   810→    <div className="space-y-1">
+   811→      {endpoints.map((e) => (
+   812→        <Link
+   813→          key={e.path + e.method}
+   814→          href={e.path}
+   815→          className="flex items-center gap-2.5 rounded-md border border-border/60 bg-card/40 px-2.5 py-1.5 hover:bg-accent/50 transition-colors"
+   816→        >
+   817→          <span
+   818→            className={
+   819→              "inline-flex w-12 flex-shrink-0 justify-center rounded px-1.5 py-0.5 text-[9px] font-bold " +
+   820→              (e.method === "GET" ? "bg-success/15 text-success" : e.method === "PATCH" ? "bg-warning/15 text-warning-foreground" : "bg-primary/15 text-primary")
+   821→            }
+   822→          >
+   823→            {e.method}
+   824→          </span>
+   825→          <code className="flex-1 truncate text-xs font-mono">{e.path}</code>
+   826→          {e.auth ? (
+   827→            <Lock className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+   828→          ) : (
+   829→            <span className="flex-shrink-0 text-[9px] text-muted-foreground">public</span>
+   830→          )}
+   831→        </Link>
+   832→      ))}
+   833→    </div>
+   834→  );
+   835→}
+   836→

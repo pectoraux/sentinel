@@ -154,6 +154,24 @@ async function main() {
 
   console.log("[seed] Seeding M2 identity & trust data...");
   await seedIdentityData();
+
+  // M3–M20 seed functions (seedGeoData through seedSatelliteData) are defined
+  // below but not called from main() by default — they were run individually
+  // during their respective milestone implementations. To re-seed from scratch
+  // (e.g. after `prisma db push --force-reset`), uncomment the calls below.
+  // Each function is idempotent or uses .catch(() => {}) for duplicate skips.
+  //
+  // await seedGeoData().catch(() => {});
+  // await seedTwinData().catch(() => {});
+  // await seedEvidenceData().catch(() => {});
+  // await seedCorroborationData().catch(() => {});
+  // await seedIntelligenceData().catch(() => {});
+  // await seedTrustData().catch(() => {});
+  // await seedNotificationData().catch(() => {});
+  // await seedSatelliteData().catch(() => {});
+
+  console.log("[seed] Seeding M21 fraud detection data...");
+  await seedFraudData().catch((e) => console.log("[seed] M21 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -389,7 +407,7 @@ async function seedIdentityData() {
   console.log(`[seed] Seeded ${SAMPLE_ORGS.length} organizations, ${demoUsers.length} demo users with devices/verifications/trust.`);
 
   console.log("[seed] Seeding M3 geospatial data...");
-  await seedGeoData();
+  await seedGeoData().catch((e) => console.log("[seed] M3 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -577,7 +595,7 @@ async function seedGeoData() {
   console.log(`[seed] Seeded ${GEO_LAYERS.length} layers, ${poiCount} POIs, ${regionCount} spatial regions.`);
 
   console.log("[seed] Seeding M4 digital twin data...");
-  await seedTwinData();
+  await seedTwinData().catch((e) => console.log("[seed] M4 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1003,7 +1021,7 @@ async function seedTwinData() {
   console.log(`[seed] Seeded ${TWIN_ENTITIES.length} twin entities, ${relCount} relationships, ${versionCount} versions, ${eventCount} events (temporally spread over 365 days).`);
 
   console.log("[seed] Seeding M7 evidence data...");
-  await seedEvidenceData();
+  await seedEvidenceData().catch((e) => console.log("[seed] M7 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1263,10 +1281,10 @@ async function seedEvidenceData() {
   console.log(`[seed] Seeded ${count} evidence items (images, video, audio, documents, GPS, sensor logs) with hash chains and version history.`);
 
   console.log("[seed] Seeding M9 corroboration data...");
-  await seedCorroborationData();
+  await seedCorroborationData().catch((e) => console.log("[seed] M9 skipped:", e instanceof Error ? e.message : String(e)));
 
   console.log("[seed] Seeding M8 community intelligence data...");
-  await seedIntelligenceData();
+  await seedIntelligenceData().catch((e) => console.log("[seed] M8 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1726,7 +1744,7 @@ async function seedIntelligenceData() {
   console.log(`[seed] Seeded ${eventCount} intelligence events, ${commentCount} comments, ${subCount} subscriptions, ${shareCount} shares, ${streamCount} stream entries (event-sourced).`);
 
   console.log("[seed] Seeding M10 civil trust data...");
-  await seedTrustData();
+  await seedTrustData().catch((e) => console.log("[seed] M10 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1867,7 +1885,7 @@ async function seedTrustData() {
   console.log(`[seed] Seeded ${count} trust factor records with 8-factor computation, 1 fraud flag, 3 decay logs.`);
 
   console.log("[seed] Seeding M11 notification data...");
-  await seedNotificationData();
+  await seedNotificationData().catch((e) => console.log("[seed] M11 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1988,7 +2006,7 @@ async function seedNotificationData() {
   console.log(`[seed] Seeded ${notifCount} notifications, ${channelCount} channels, ${subCount} subscriptions, ${gfCount} geofences.`);
 
   console.log("[seed] Seeding M12 satellite ingestion data...");
-  await seedSatelliteData();
+  await seedSatelliteData().catch((e) => console.log("[seed] M12 skipped:", e instanceof Error ? e.message : String(e)));
 }
 
 // ---------------------------------------------------------------------------
@@ -2140,6 +2158,508 @@ async function seedSatelliteData() {
 
   const scheduleCount = await prisma.ingestionSchedule.count();
   console.log(`[seed] Seeded ${sceneCount} satellite scenes, ${tileCount} raster tiles, ${scheduleCount} ingestion schedules.`);
+}
+
+// ---------------------------------------------------------------------------
+// M21 — Fraud Detection AI seed data
+// ---------------------------------------------------------------------------
+// Creates realistic fraud alerts across all 7 fraud types, with signals,
+// investigations, and user risk profiles. References real users, evidence,
+// and missions from the platform.
+// ---------------------------------------------------------------------------
+
+async function seedFraudData() {
+  // Get real users to reference
+  const users = await prisma.user.findMany({
+    select: { id: true, email: true, name: true, createdAt: true },
+    take: 10,
+  });
+  if (users.length < 3) {
+    console.log("[seed] Not enough users for fraud seed — skipping.");
+    return;
+  }
+
+  // Get real evidence to reference
+  const evidence = await prisma.evidence.findMany({
+    select: { id: true, key: true, checksum: true, uploadedById: true, lat: true, lng: true, createdAt: true, metadata: true },
+    take: 20,
+  });
+
+  // Get real missions to reference
+  const missions = await prisma.mission.findMany({
+    select: { id: true, key: true, assignedToId: true, actualReward: true },
+    take: 10,
+  });
+
+  // Check if fraud data already exists
+  const existing = await prisma.fraudAlert.count();
+  if (existing > 0) {
+    console.log(`[seed] Fraud data already exists (${existing} alerts) — skipping.`);
+    return;
+  }
+
+  const admin = users[0]!;
+  const user1 = users[1] ?? admin;
+  const user2 = users[2] ?? user1;
+  const user3 = users[3] ?? user2;
+  const user4 = users[4] ?? user3;
+  const user5 = users[5] ?? user4;
+
+  const now = new Date();
+  const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  type AlertSeed = {
+    key: string;
+    type: string;
+    severity: string;
+    status: string;
+    title: string;
+    description: string;
+    confidence: number;
+    riskScore: number;
+    targetUserId?: string;
+    targetUserIds?: string[];
+    targetEntityIds?: string[];
+    estimatedImpactGHS?: number;
+    detectedAt: Date;
+    resolvedAt?: Date;
+    resolution?: string;
+    signals: Array<{
+      signalType: string;
+      detector: string;
+      confidence: number;
+      weight: number;
+      description: string;
+      evidence?: Record<string, unknown>;
+    }>;
+    investigation?: {
+      status: string;
+      recommendedAction?: string;
+      penaltyApplied?: number;
+      rewardsRevoked?: number;
+      notes?: string;
+    };
+  };
+
+  // Build the 7 fraud alerts — one per fraud type, with realistic signals
+  // referencing real platform data.
+  const ev1 = evidence[0];
+  const ev2 = evidence[1] ?? ev1;
+  const ev3 = evidence[2] ?? ev2;
+  const mission1 = missions[0];
+
+  const alerts: AlertSeed[] = [
+    // 1. FAKE EVIDENCE — duplicate hash across users
+    {
+      key: "fraud-fake-evidence-dup-001",
+      type: "fake_evidence",
+      severity: "high",
+      status: "investigating",
+      title: "Fake Evidence: Duplicate content hash across users",
+      description: `Identical SHA-256 content hash detected in evidence uploaded by 2 different users. The same image was submitted as separate evidence items, suggesting image reuse to inflate evidence counts.`,
+      confidence: 0.92,
+      riskScore: 0.85,
+      targetUserId: user1.id,
+      targetUserIds: [user1.id, user2.id],
+      targetEntityIds: ev1 ? [ev1.id, ev2?.id].filter(Boolean) as string[] : [],
+      detectedAt: hoursAgo(6),
+      signals: [
+        {
+          signalType: "hash_duplicate",
+          detector: "detectFakeEvidence",
+          confidence: 0.95,
+          weight: 0.95,
+          description: `Identical content hash (${ev1?.checksum.slice(0, 12) ?? "abc123def456"}…) found in 2 evidence items uploaded by ${user1.name} and ${user2.name}`,
+          evidence: { checksum: ev1?.checksum, evidenceIds: [ev1?.id, ev2?.id].filter(Boolean), userIds: [user1.id, user2.id] },
+        },
+        {
+          signalType: "metadata_mismatch",
+          detector: "detectFakeEvidence",
+          confidence: 0.7,
+          weight: 0.7,
+          description: `Evidence "${ev1?.key ?? "evd-001"}" EXIF capture time differs from upload time by 14 days — possible stale image reuse`,
+          evidence: { evidenceId: ev1?.id, timeDeltaDays: 14 },
+        },
+      ],
+      investigation: {
+        status: "in_progress",
+        recommendedAction: "revoke_rewards",
+        notes: "Reviewing upload IPs and device fingerprints to confirm single-operator hypothesis.",
+      },
+    },
+    // 2. COLLUSION — circular corroboration ring
+    {
+      key: "fraud-collusion-ring-001",
+      type: "collusion",
+      severity: "high",
+      status: "confirmed",
+      title: "Collusion: 3-user circular corroboration ring",
+      description: `Three users form a closed corroboration ring: ${user1.name} → ${user2.name} → ${user3.name} → ${user1.name}. They only support each other's evidence and never corroborate outside the ring. Coordinated timestamps suggest single operator.`,
+      confidence: 0.88,
+      riskScore: 0.78,
+      targetUserId: user1.id,
+      targetUserIds: [user1.id, user2.id, user3.id],
+      detectedAt: daysAgo(1),
+      signals: [
+        {
+          signalType: "circular_corroboration",
+          detector: "detectCollusion",
+          confidence: 0.9,
+          weight: 0.9,
+          description: `Circular corroboration ring: ${user1.name} → ${user2.name} → ${user3.name} → ${user1.name} — 3 users only support each other`,
+          evidence: { cycle: [user1.id, user2.id, user3.id], userCount: 3 },
+        },
+        {
+          signalType: "coordinated_voting",
+          detector: "detectCollusion",
+          confidence: 0.8,
+          weight: 0.8,
+          description: `Corroboration timestamps show all 3 users supporting within 4-minute windows — coordinated action`,
+          evidence: { timeSpanMinutes: 4, userCount: 3 },
+        },
+      ],
+      investigation: {
+        status: "closed",
+        recommendedAction: "warn_user",
+        penaltyApplied: 0.15,
+        notes: "All 3 users warned. Trust scores reduced by 15%. Monitoring for recurrence.",
+      },
+    },
+    // 3. SOCKPUPPET — shared device
+    {
+      key: "fraud-sockpuppet-device-001",
+      type: "sockpuppet",
+      severity: "medium",
+      status: "investigating",
+      title: "Sockpuppet: 2 accounts on single trusted device",
+      description: `Two user accounts (${user1.name} and ${user4.name}) have both logged in from the same trusted device fingerprint. Activity timing is correlated — user4 always logs in within 5 minutes of user1 logging out. Likely a single operator controlling both accounts.`,
+      confidence: 0.82,
+      riskScore: 0.65,
+      targetUserId: user1.id,
+      targetUserIds: [user1.id, user4.id],
+      detectedAt: daysAgo(2),
+      signals: [
+        {
+          signalType: "shared_device",
+          detector: "detectSockpuppets",
+          confidence: 0.85,
+          weight: 0.85,
+          description: `2 user accounts logged in from the same trusted device (fingerprint: dev-fp-7a3b…) — likely single operator`,
+          evidence: { deviceFingerprint: "dev-fp-7a3b91", userIds: [user1.id, user4.id] },
+        },
+        {
+          signalType: "timing_pattern",
+          detector: "detectSockpuppets",
+          confidence: 0.65,
+          weight: 0.65,
+          description: `Correlated login timing: user4 logs in within 5 min of user1 logging out (12 occurrences observed)`,
+          evidence: { correlatedLogins: 12, avgDelayMinutes: 5 },
+        },
+      ],
+      investigation: {
+        status: "in_progress",
+        recommendedAction: "suspend_user",
+        notes: "Awaiting identity verification documents from both accounts.",
+      },
+    },
+    // 4. LOCATION SPOOFING — impossible travel
+    {
+      key: "fraud-location-spoof-001",
+      type: "location_spoofing",
+      severity: "medium",
+      status: "detected",
+      title: "Location Spoofing: Impossible travel between submissions",
+      description: `User ${user2.name} submitted evidence from Prestea (5.43°N, 2.14°W) and 23 minutes later from Obuasi (6.20°N, 1.68°W) — 152 km apart. This requires 396 km/h ground speed, which is physically impossible.`,
+      confidence: 0.90,
+      riskScore: 0.72,
+      targetUserId: user2.id,
+      targetUserIds: [user2.id],
+      targetEntityIds: ev2 ? [ev2.id, ev3?.id].filter(Boolean) as string[] : [],
+      detectedAt: daysAgo(3),
+      signals: [
+        {
+          signalType: "impossible_travel",
+          detector: "detectLocationSpoofing",
+          confidence: 0.9,
+          weight: 0.9,
+          description: `User traveled 152 km in 0.38 hours (396 km/h — physically impossible) between evidence submissions`,
+          evidence: {
+            userId: user2.id,
+            fromLat: 5.43, fromLng: -2.14,
+            toLat: 6.20, toLng: -1.68,
+            distanceKm: 152,
+            timeHours: 0.38,
+            speedKmh: 396,
+          },
+        },
+        {
+          signalType: "gps_metadata_mismatch",
+          detector: "detectLocationSpoofing",
+          confidence: 0.75,
+          weight: 0.8,
+          description: `Evidence GPS coordinates don't match the user's session IP geolocation (IP geo: Kumasi, GPS: Prestea)`,
+          evidence: { userId: user2.id, ipGeoCity: "Kumasi", gpsLocation: "Prestea" },
+        },
+      ],
+    },
+    // 5. DEEPFAKE — AI artifact in image
+    {
+      key: "fraud-deepfake-ai-001",
+      type: "deepfake",
+      severity: "critical",
+      status: "escalated",
+      title: "Deepfake: AI-generated image with Midjourney signature",
+      description: `Evidence image uploaded by ${user3.name} contains AI generation tool signatures in metadata. The image was likely generated by Midjourney and submitted as a "real" photo of illegal mining. No EXIF data present (real phone photos always have EXIF).`,
+      confidence: 0.94,
+      riskScore: 0.92,
+      targetUserId: user3.id,
+      targetUserIds: [user3.id],
+      targetEntityIds: ev3 ? [ev3.id] : [],
+      detectedAt: hoursAgo(12),
+      signals: [
+        {
+          signalType: "ai_artifact",
+          detector: "detectDeepfakes",
+          confidence: 0.9,
+          weight: 0.85,
+          description: `Evidence metadata contains AI generation tool signature: "midjourney"`,
+          evidence: { evidenceId: ev3?.id, tool: "midjourney" },
+        },
+        {
+          signalType: "facial_inconsistency",
+          detector: "detectDeepfakes",
+          confidence: 0.85,
+          weight: 0.8,
+          description: `Evidence image processed with image editing software (Adobe Photoshop CC 2024) — manipulation detected`,
+          evidence: { evidenceId: ev3?.id, software: "Adobe Photoshop CC 2024" },
+        },
+        {
+          signalType: "ai_artifact",
+          detector: "detectDeepfakes",
+          confidence: 0.65,
+          weight: 0.7,
+          description: `No EXIF metadata present — real photos taken with cameras/phones embed EXIF. Possible AI-generated image.`,
+          evidence: { evidenceId: ev3?.id, hasExif: false },
+        },
+      ],
+      investigation: {
+        status: "pending_review",
+        recommendedAction: "escalate_to_admin",
+        notes: "Critical: AI-generated evidence submitted. Escalating to admin for account suspension review.",
+      },
+    },
+    // 6. VOTE RING — coordinated corroboration
+    {
+      key: "fraud-vote-ring-001",
+      type: "vote_ring",
+      severity: "high",
+      status: "confirmed",
+      title: "Vote Ring: 4 users corroborating within 8-minute windows",
+      description: `Four users corroborated the same evidence item within 8 minutes — typical organic corroboration spans hours or days. All 4 users share the same organization and have corroborated each other 23 times in the past month.`,
+      confidence: 0.85,
+      riskScore: 0.80,
+      targetUserId: user1.id,
+      targetUserIds: [user1.id, user2.id, user3.id, user5.id],
+      targetEntityIds: ev1 ? [ev1.id] : [],
+      detectedAt: daysAgo(4),
+      resolvedAt: daysAgo(2),
+      resolution: "user_warned",
+      signals: [
+        {
+          signalType: "coordinated_voting",
+          detector: "detectVoteRings",
+          confidence: 0.8,
+          weight: 0.8,
+          description: `4 users corroborated evidence within 8 minutes — coordinated voting pattern`,
+          evidence: {
+            userIds: [user1.id, user2.id, user3.id, user5.id],
+            timeSpanMinutes: 8,
+            supportCount: 4,
+          },
+        },
+        {
+          signalType: "circular_corroboration",
+          detector: "detectVoteRings",
+          confidence: 0.85,
+          weight: 0.9,
+          description: `4 users form a circular support pattern — they only corroborate each other's evidence (23 mutual supports in 30 days)`,
+          evidence: { cycle: [user1.id, user2.id, user3.id, user5.id], mutualSupports: 23, periodDays: 30 },
+        },
+      ],
+      investigation: {
+        status: "closed",
+        recommendedAction: "warn_user",
+        penaltyApplied: 0.2,
+        notes: "All 4 users warned. Trust scores reduced by 20%. Corroborations invalidated.",
+      },
+    },
+    // 7. REWARD FARMING — bulk low-quality submissions
+    {
+      key: "fraud-reward-farming-001",
+      type: "reward_farming",
+      severity: "medium",
+      status: "detected",
+      title: "Reward Farming: 12 low-quality evidence submissions",
+      description: `User ${user5.name} submitted 12 evidence items in 7 days, of which 9 (75%) were rated low-quality (weight < 0.4). Pattern consistent with reward farming — submitting high volume of low-effort evidence to accumulate reward pool share.`,
+      confidence: 0.78,
+      riskScore: 0.68,
+      targetUserId: user5.id,
+      targetUserIds: [user5.id],
+      estimatedImpactGHS: 600,
+      detectedAt: hoursAgo(18),
+      signals: [
+        {
+          signalType: "low_quality_spam",
+          detector: "detectRewardFarming",
+          confidence: 0.78,
+          weight: 0.7,
+          description: `User submitted 12 evidence items with 75% rated low-quality (avg weight 0.28) — reward farming pattern`,
+          evidence: {
+            userId: user5.id,
+            totalSubmissions: 12,
+            lowQualityCount: 9,
+            lowQualityPct: 0.75,
+            avgWeight: 0.28,
+          },
+        },
+        {
+          signalType: "bulk_submission",
+          detector: "detectRewardFarming",
+          confidence: 0.6,
+          weight: 0.6,
+          description: `12 evidence items submitted in 7 days — abnormally high volume (platform avg: 1.5/week)`,
+          evidence: { userId: user5.id, submissionCount: 12, periodDays: 7, platformAvg: 1.5 },
+        },
+        {
+          signalType: "repeated_evidence",
+          detector: "detectRewardFarming",
+          confidence: 0.85,
+          weight: 0.85,
+          description: `Same evidence (${ev3?.id?.slice(0, 8) ?? "abc12345"}…) submitted to 3 different missions — reusing evidence to farm rewards`,
+          evidence: mission1 ? {
+            evidenceId: ev3?.id,
+            missionIds: [mission1.id],
+            totalRewardEarned: mission1.actualReward ?? 150,
+          } : { evidenceId: ev3?.id },
+        },
+      ],
+    },
+  ];
+
+  let alertCount = 0;
+  let signalCount = 0;
+  let investigationCount = 0;
+
+  for (const a of alerts) {
+    const alert = await prisma.fraudAlert.create({
+      data: {
+        key: a.key,
+        type: a.type,
+        severity: a.severity,
+        status: a.status,
+        title: a.title,
+        description: a.description,
+        confidence: a.confidence,
+        riskScore: a.riskScore,
+        targetUserId: a.targetUserId,
+        targetUserIds: a.targetUserIds ? JSON.stringify(a.targetUserIds) : null,
+        targetEntityIds: a.targetEntityIds ? JSON.stringify(a.targetEntityIds) : null,
+        signalCount: a.signals.length,
+        estimatedImpactGHS: a.estimatedImpactGHS ?? 0,
+        model: "fraud-ai-v1",
+        detectorVersion: "1.0.0",
+        metadata: JSON.stringify({ seed: true, detectorCount: a.signals.length }),
+        detectedAt: a.detectedAt,
+        resolvedAt: a.resolvedAt,
+        resolution: a.resolution,
+      },
+    });
+    alertCount++;
+
+    // Create signals
+    for (const s of a.signals) {
+      await prisma.fraudSignal.create({
+        data: {
+          alertId: alert.id,
+          signalType: s.signalType,
+          detector: s.detector,
+          confidence: s.confidence,
+          weight: s.weight,
+          description: s.description,
+          evidence: s.evidence ? JSON.stringify(s.evidence) : null,
+        },
+      });
+      signalCount++;
+    }
+
+    // Create investigation if specified
+    if (a.investigation) {
+      await prisma.fraudInvestigation.create({
+        data: {
+          alertId: alert.id,
+          status: a.investigation.status,
+          assignedToId: admin.id,
+          recommendedAction: a.investigation.recommendedAction,
+          penaltyApplied: a.investigation.penaltyApplied ?? 0,
+          rewardsRevoked: a.investigation.rewardsRevoked ?? 0,
+          notes: a.investigation.notes,
+          openedAt: a.detectedAt,
+          closedAt: a.investigation.status === "closed" ? (a.resolvedAt ?? now) : null,
+        },
+      });
+      investigationCount++;
+    }
+  }
+
+  // Create user risk profiles for all targeted users
+  const allTargetUsers = new Set<string>();
+  for (const a of alerts) {
+    if (a.targetUserId) allTargetUsers.add(a.targetUserId);
+    if (a.targetUserIds) for (const u of a.targetUserIds) allTargetUsers.add(u);
+  }
+
+  let profileCount = 0;
+  for (const userId of allTargetUsers) {
+    const userAlerts = alerts.filter(
+      (a) => a.targetUserId === userId || (a.targetUserIds ?? []).includes(userId),
+    );
+    const confirmedCount = userAlerts.filter((a) => a.status === "confirmed").length;
+    const dismissedCount = userAlerts.filter((a) => a.status === "dismissed").length;
+    const avgRisk = userAlerts.reduce((s, a) => s + a.riskScore, 0) / (userAlerts.length || 1);
+    const riskLevel = avgRisk >= 0.85 ? "critical" : avgRisk >= 0.6 ? "high_risk" : avgRisk >= 0.4 ? "moderate_risk" : avgRisk >= 0.2 ? "low_risk" : "clean";
+    const trustPenalty = confirmedCount > 0 ? Math.min(1, confirmedCount * 0.2 + avgRisk * 0.3) : 0;
+
+    const signalsByType: Record<string, number> = {};
+    for (const a of userAlerts) {
+      signalsByType[a.type] = (signalsByType[a.type] ?? 0) + a.signals.length;
+    }
+
+    await prisma.userRiskProfile.create({
+      data: {
+        userId,
+        riskScore: Math.round(avgRisk * 100) / 100,
+        riskLevel,
+        alertCount: userAlerts.length,
+        confirmedAlertCount: confirmedCount,
+        dismissedAlertCount: dismissedCount,
+        signalsByType: JSON.stringify(signalsByType),
+        trustPenalty: Math.round(trustPenalty * 100) / 100,
+        rewardsRevoked: 0,
+        factors: JSON.stringify({
+          alertCount: userAlerts.length,
+          confirmedCount,
+          dismissedCount,
+          signalsByType,
+        }),
+        lastAlertAt: userAlerts[0]?.detectedAt ?? now,
+        lastCalculatedAt: now,
+      },
+    }).catch(() => {});
+    profileCount++;
+  }
+
+  console.log(`[seed] Seeded ${alertCount} fraud alerts, ${signalCount} signals, ${investigationCount} investigations, ${profileCount} user risk profiles.`);
 }
 
 main()

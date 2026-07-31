@@ -2041,3 +2041,150 @@ model RewardLedger {
   @@index([createdAt])
   @@index([entryHash])
 }
+
+// =============================================================================
+// MILESTONE 21 — Fraud Detection AI
+// =============================================================================
+// Detects seven classes of fraud across the Sentinel platform:
+//   1. Fake evidence   — manipulated, duplicated, or fabricated evidence
+//   2. Collusion       — multiple users coordinating to manipulate evidence
+//   3. Sockpuppets     — one user controlling multiple accounts
+//   4. Location spoofing — GPS coordinates that don't match reality
+//   5. Deepfakes       — AI-generated images/video detected as synthetic
+//   6. Vote rings      — coordinated corroboration rings (circular support)
+//   7. Reward farming  — low-quality submissions to farm reward pools
+//
+// Each alert groups multiple signals from different detectors. Alerts are
+// investigated, resolved, and feed into UserRiskProfile for trust penalties.
+// =============================================================================
+
+model FraudAlert {
+  id              String   @id @default(cuid())
+  key             String   @unique // human-readable, e.g. "fraud-prestea-collusion-001"
+  // type: fake_evidence | collusion | sockpuppet | location_spoofing | deepfake | vote_ring | reward_farming
+  type            String
+  // severity: low | medium | high | critical
+  severity        String   @default("medium")
+  // status: detected | investigating | confirmed | dismissed | resolved | escalated
+  status          String   @default("detected")
+  title           String
+  description     String
+  // confidence: 0.0–1.0 — how confident the AI is that this is real fraud
+  confidence      Float    @default(0.5)
+  // riskScore: 0.0–1.0 — overall risk to the platform
+  riskScore       Float    @default(0.5)
+  // primary suspect
+  targetUserId    String?
+  // all involved users (JSON array of user IDs)
+  targetUserIds   String?  // JSON
+  // affected entities (JSON array of evidence IDs, mission IDs, event IDs)
+  targetEntityIds String?  // JSON
+  // signal count
+  signalCount     Int      @default(0)
+  // estimated financial impact (GHS) — for reward farming / fraud that affected payouts
+  estimatedImpactGHS Float @default(0)
+  // AI detection metadata
+  model           String   @default("fraud-ai-v1")
+  detectorVersion String   @default("1.0.0")
+  metadata        String?  // JSON
+  // investigation
+  investigation   FraudInvestigation?
+  signals         FraudSignal[]
+  // resolution
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolution      String?  // dismissed | confirmed | escalated | user_warned | user_suspended | rewards_revoked
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([status])
+  @@index([severity])
+  @@index([targetUserId])
+  @@index([detectedAt])
+  @@index([confidence])
+}
+
+model FraudSignal {
+  id              String   @id @default(cuid())
+  alertId         String
+  // signalType: hash_duplicate | metadata_mismatch | impossible_travel | identical_timestamp |
+  //             shared_device | shared_ip | timing_pattern | gps_metadata_mismatch |
+  //             ai_artifact | facial_inconsistency | coordinated_voting |
+  //             circular_corroboration | bulk_submission | low_quality_spam | repeated_evidence
+  signalType      String
+  // detector: which detector method found this signal
+  detector        String
+  // confidence: 0.0–1.0 — how strong this individual signal is
+  confidence      Float    @default(0.5)
+  // weight: 0.0–1.0 — how much this signal contributes to the alert's overall risk
+  weight          Float    @default(0.5)
+  description     String
+  // evidence: JSON — supporting data (user IDs, evidence IDs, timestamps, distances, hashes)
+  evidence        String?  // JSON
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  alert           FraudAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+  @@index([signalType])
+  @@index([detector])
+  @@index([confidence])
+}
+
+model FraudInvestigation {
+  id              String   @id @default(cuid())
+  alertId         String   @unique
+  // status: open | in_progress | pending_review | closed
+  status          String   @default("open")
+  assignedToId    String?  // investigator user ID
+  openedAt        DateTime @default(now())
+  closedAt        DateTime?
+  // findings: JSON — investigator notes, evidence reviewed, interviews
+  findings        String?  // JSON
+  // recommendedAction: dismiss | warn_user | suspend_user | revoke_rewards | escalate_to_admin | refer_to_authorities
+  recommendedAction String?
+  // penaltyApplied: trust score penalty applied (0.0–1.0)
+  penaltyApplied  Float    @default(0.0)
+  // rewardsRevoked: GHS amount revoked from the user
+  rewardsRevoked  Float    @default(0)
+  // userSuspended: whether the user was suspended
+  userSuspended   Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  alert           FraudAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model UserRiskProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  // riskScore: 0.0–1.0 — overall fraud risk
+  riskScore       Float    @default(0.0)
+  // riskLevel: clean | low_risk | moderate_risk | high_risk | critical
+  riskLevel       String   @default("clean")
+  // alert metrics
+  alertCount      Int      @default(0)
+  confirmedAlertCount Int  @default(0)
+  dismissedAlertCount Int  @default(0)
+  // signalsByType: JSON — { fake_evidence: 2, collusion: 1, ... }
+  signalsByType   String?  // JSON
+  // penalty
+  trustPenalty    Float    @default(0.0) // 0.0–1.0 trust score penalty
+  rewardsRevoked  Float    @default(0)   // GHS total revoked
+  // factors: JSON breakdown of how risk was computed
+  factors         String?  // JSON
+  lastAlertAt     DateTime?
+  lastCalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([riskScore])
+  @@index([riskLevel])
+}
