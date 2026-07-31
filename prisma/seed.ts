@@ -136,6 +136,42 @@ async function seedBootstrapUser() {
 
    
   console.log("[seed] Bootstrap admin: admin@sentinel.africa / SentinelAdmin2024!");
+
+  // === Demo accounts for quick login ===
+  const demoPassword = await bcrypt.hash("SentinelDemo2024!", 12);
+  const realAdminPassword = await bcrypt.hash("Payswap123456", 12);
+
+  const demoAccounts = [
+    { email: "citizen@sentinel.africa", name: "Demo Citizen Reporter", role: "citizen_reporter" },
+    { email: "inspector@sentinel.africa", name: "Demo Inspector", role: "inspector" },
+    { email: "gov@sentinel.africa", name: "Demo Government Official", role: "analyst" },
+    { email: "ekontetevi@gmail.com", name: "Eric Admin", role: "super_admin" },
+  ];
+
+  for (const acc of demoAccounts) {
+    const user = await prisma.user.upsert({
+      where: { email: acc.email },
+      create: {
+        email: acc.email,
+        name: acc.name,
+        passwordHash: acc.email === "ekontetevi@gmail.com" ? realAdminPassword : demoPassword,
+        status: "active",
+      },
+      update: {},
+    });
+
+    const role = await prisma.role.findUnique({ where: { key: acc.role } });
+    if (role) {
+      await prisma.userRole.upsert({
+        where: { userId_roleId: { userId: user.id, roleId: role.id } },
+        create: { userId: user.id, roleId: role.id },
+        update: {},
+      });
+    }
+  }
+
+  console.log("[seed] Demo accounts: citizen/inspector/gov@sentinel.africa / SentinelDemo2024!");
+  console.log("[seed] Real admin: ekontetevi@gmail.com / Payswap123456");
 }
 
 async function main() {

@@ -1,0 +1,2002 @@
+     1→// =============================================================================
+     2→// Sentinel — Prisma Schema (Development: SQLite)
+     3→// =============================================================================
+     4→// This schema runs on SQLite for the local sandbox so the platform boots
+     5→// without a database server. It is structurally identical to the production
+     6→// PostgreSQL schema (see schema.postgres.prisma).
+     7→//
+     8→// PostGIS geometry columns are intentionally NOT modeled in Prisma (Prisma has
+     9→// no native geometry type). In production they are managed via raw SQL
+    10→// migrations (see prisma/sql/postgis.sql) and accessed through repository
+    11→// raw queries. This keeps the ORM models portable across both databases.
+    12→// =============================================================================
+    13→
+    14→generator client {
+    15→  provider = "prisma-client-js"
+    16→  // Generated types include a shared `SentinelPrismaClient` augmentation.
+    17→  output   = "../node_modules/.prisma/client"
+    18→}
+    19→
+    20→datasource db {
+    21→  provider = "sqlite"
+    22→  url      = env("DATABASE_URL")
+    23→}
+    24→
+    25→// =============================================================================
+    26→// IAM — Identity & Access Management
+    27→// =============================================================================
+    28→
+    29→model User {
+    30→  id            String    @id @default(cuid())
+    31→  email         String    @unique
+    32→  emailVerified DateTime?
+    33→  name          String?
+    34→  image         String?
+    35→  passwordHash  String? // null for OAuth-only accounts
+    36→  status        String    @default("active") // active | suspended | locked | pending
+    37→  failedLogins  Int       @default(0)
+    38→  lockedUntil   DateTime?
+    39→  lastLoginAt   DateTime?
+    40→  createdAt     DateTime  @default(now())
+    41→  updatedAt     DateTime  @updatedAt
+    42→
+    43→  accounts      Account[]
+    44→  sessions      Session[]
+    45→  userRoles     UserRole[]
+    46→  auditLogs     AuditLog[]
+    47→  createdFlags  FeatureFlag[]  @relation("FlagCreatedBy")
+    48→  updatedFlags  FeatureFlag[]  @relation("FlagUpdatedBy")
+    49→  orgMemberships OrganizationMember[]
+    50→  orgVerifiedBy  Organization[]  @relation("OrgVerifiedBy")
+    51→  devices        Device[]
+    52→  verifications  IdentityVerification[]
+    53→  trustProfile   TrustProfile?
+    54→  trustEvents    TrustEvent[]
+    55→  roleSwitches   RoleSwitchLog[]
+    56→  activeRole     ActiveRole?
+    57→  invitedOrgs    OrganizationInvitation[]  @relation("InvitedBy")
+    58→
+    59→  @@index([status])
+    60→  @@index([email])
+    61→}
+    62→
+    63→model Account {
+    64→  id                String  @id @default(cuid())
+    65→  userId            String
+    66→  type              String // oauth | oidc | credentials
+    67→  provider          String // google | github | azure-ad | credentials
+    68→  providerAccountId String
+    69→  refreshToken      String?
+    70→  accessToken       String?
+    71→  expiresAt         Int?
+    72→  tokenType         String?
+    73→  scope             String?
+    74→  idToken           String?
+    75→  createdAt         DateTime @default(now())
+    76→  updatedAt         DateTime @updatedAt
+    77→
+    78→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    79→
+    80→  @@unique([provider, providerAccountId])
+    81→  @@index([userId])
+    82→}
+    83→
+    84→model Session {
+    85→  id           String   @id @default(cuid())
+    86→  sessionToken String   @unique
+    87→  userId       String
+    88→  expires      DateTime
+    89→  ip           String?
+    90→  userAgent    String?
+    91→  createdAt    DateTime @default(now())
+    92→
+    93→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    94→
+    95→  @@index([userId])
+    96→}
+    97→
+    98→model VerificationToken {
+    99→  identifier String
+   100→  token      String   @unique
+   101→  expires    DateTime
+   102→
+   103→  @@unique([identifier, token])
+   104→}
+   105→
+   106→// =============================================================================
+   107→// RBAC — Role-Based Access Control
+   108→// =============================================================================
+   109→
+   110→model Role {
+   111→  id          String   @id @default(cuid())
+   112→  key         String   @unique // e.g. "admin", "analyst", "field-agent", "citizen-reporter"
+   113→  name        String
+   114→  description String?
+   115→  isSystem    Boolean  @default(false) // system roles cannot be deleted
+   116→  createdAt   DateTime @default(now())
+   117→  updatedAt   DateTime @updatedAt
+   118→
+   119→  permissions RolePermission[]
+   120→  users       UserRole[]
+   121→
+   122→  @@index([key])
+   123→}
+   124→
+   125→model Permission {
+   126→  id          String   @id @default(cuid())
+   127→  key         String   @unique // e.g. "cases:read", "reports:create"
+   128→  name        String
+   129→  description String?
+   130→  resource    String // e.g. "cases", "reports", "users"
+   131→  action      String // e.g. "read", "create", "update", "delete", "approve"
+   132→  createdAt   DateTime @default(now())
+   133→
+   134→  roles RolePermission[]
+   135→
+   136→  @@unique([resource, action])
+   137→  @@index([resource])
+   138→}
+   139→
+   140→model RolePermission {
+   141→  roleId       String
+   142→  permissionId String
+   143→  createdAt    DateTime @default(now())
+   144→
+   145→  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+   146→  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+   147→
+   148→  @@id([roleId, permissionId])
+   149→}
+   150→
+   151→model UserRole {
+   152→  userId    String
+   153→  roleId    String
+   154→  assignedAt DateTime @default(now())
+   155→  assignedBy String?
+   156→  expiresAt DateTime?
+   157→
+   158→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   159→  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+   160→
+   161→  @@id([userId, roleId])
+   162→  @@index([roleId])
+   163→}
+   164→
+   165→// =============================================================================
+   166→// Audit Log (append-only, tamper-evident)
+   167→// =============================================================================
+   168→
+   169→model AuditLog {
+   170→  id          String   @id @default(cuid())
+   171→  timestamp   DateTime @default(now())
+   172→  actorId     String?  // user id (null for system events)
+   173→  actorType   String   @default("user") // user | system | service
+   174→  action      String   // e.g. "user.login", "feature_flag.updated"
+   175→  resource    String   // target resource type
+   176→  resourceId  String?  // target resource id
+   177→  outcome     String   @default("success") // success | failure | denied
+   178→  ipAddress   String?
+   179→  userAgent   String?
+   180→  requestId   String?  // correlation id for distributed tracing
+   181→  metadata    String?  // JSON string (portable across sqlite/postgres)
+   182→  hash        String?  // chaining hash for tamper-evidence
+   183→  prevHash    String?
+   184→
+   185→  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+   186→
+   187→  @@index([timestamp])
+   188→  @@index([actorId])
+   189→  @@index([action])
+   190→  @@index([resource, resourceId])
+   191→}
+   192→
+   193→// =============================================================================
+   194→// Feature Flags
+   195→// =============================================================================
+   196→
+   197→model FeatureFlag {
+   198→  id          String    @id @default(cuid())
+   199→  key         String    @unique // e.g. "intelligence.engine.v2"
+   200→  name        String
+   201→  description String?
+   202→  enabled     Boolean   @default(false)
+   203→  // rollout: percentage of eligible users (0-100). 100 = all.
+   204→  rolloutPercentage Int @default(0)
+   205→  // strategy: boolean | percentage | segment | environment
+   206→  strategy    String    @default("boolean")
+   207→  // config: JSON string of strategy-specific config (segments, envs, etc.)
+   208→  config      String?
+   209→  createdAt   DateTime  @default(now())
+   210→  updatedAt   DateTime  @updatedAt
+   211→  createdById String?
+   212→  updatedById String?
+   213→
+   214→  createdBy User? @relation("FlagCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+   215→  updatedBy User? @relation("FlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+   216→  segments  FeatureFlagSegment[]
+   217→
+   218→  @@index([enabled])
+   219→  @@index([key])
+   220→}
+   221→
+   222→model FeatureFlagSegment {
+   223→  id           String  @id @default(cuid())
+   224→  flagId       String
+   225→  name         String
+   226→  // rule: JSON string describing the segment predicate
+   227→  rule         String
+   228→  priority     Int     @default(0)
+   229→
+   230→  flag FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+   231→
+   232→  @@index([flagId])
+   233→}
+   234→
+   235→// =============================================================================
+   236→// Event-Driven Architecture — Transactional Outbox
+   237→// =============================================================================
+   238→// Domain events are written to the outbox in the same DB transaction as the
+   239→// state change that produced them, then a background relay publishes them to
+   240→// the event bus. This guarantees at-least-once delivery without 2PC.
+   241→// =============================================================================
+   242→
+   243→model OutboxEvent {
+   244→  id            String   @id @default(cuid())
+   245→  aggregateType String   // e.g. "User", "FeatureFlag"
+   246→  aggregateId   String
+   247→  eventType     String   // e.g. "user.created"
+   248→  payload       String   // JSON string
+   249→  metadata      String?  // JSON string (traceId, userId, etc.)
+   250→  occurredAt    DateTime @default(now())
+   251→  // status: pending | published | failed | dead_letter
+   252→  status        String   @default("pending")
+   253→  attempts      Int      @default(0)
+   254→  lastError     String?
+   255→  publishedAt   DateTime?
+   256→  createdAt     DateTime @default(now())
+   257→
+   258→  @@index([status, occurredAt])
+   259→  @@index([aggregateType, aggregateId])
+   260→  @@index([eventType])
+   261→}
+   262→
+   263→// =============================================================================
+   264→// Background Jobs — durable record
+   265→// =============================================================================
+   266→
+   267→model JobRecord {
+   268→  id         String    @id @default(cuid())
+   269→  queue      String    // e.g. "default", "ingest", "notifications"
+   270→  name       String    // job handler name
+   271→  payload    String    // JSON string
+   272→  // status: queued | running | completed | failed | retrying | dead_letter
+   273→  status     String    @default("queued")
+   274→  attempts   Int       @default(0)
+   275→  maxAttempts Int      @default(3)
+   276→  lastError  String?
+   277→  scheduledAt DateTime @default(now())
+   278→  startedAt  DateTime?
+   279→  completedAt DateTime?
+   280→  createdAt  DateTime  @default(now())
+   281→
+   282→  @@index([status, scheduledAt])
+   283→  @@index([queue])
+   284→  @@index([name])
+   285→}
+   286→
+   287→// =============================================================================
+   288→// Object Storage — metadata for stored objects
+   289→// =============================================================================
+   290→
+   291→model StoredObject {
+   292→  id          String   @id @default(cuid())
+   293→  key         String   @unique // storage key (path)
+   294→  bucket      String   @default("default")
+   295→  provider    String   // local | s3 | minio
+   296→  contentType String?
+   297→  size        Int      @default(0)
+   298→  checksum    String?  // sha256
+   299→  // ownerType/ownerId: e.g. ("Report", "abc123")
+   300→  ownerType   String?
+   301→  ownerId     String?
+   302→  metadata    String?  // JSON string
+   303→  createdAt   DateTime @default(now())
+   304→  updatedAt   DateTime @updatedAt
+   305→
+   306→  @@index([bucket, key])
+   307→  @@index([ownerType, ownerId])
+   308→}
+   309→
+   310→// =============================================================================
+   311→// Health Checks — recent snapshots
+   312→// =============================================================================
+   313→
+   314→model HealthCheckResult {
+   315→  id          String   @id @default(cuid())
+   316→  checkName   String   // e.g. "database", "storage", "event-bus"
+   317→  status      String   // healthy | degraded | unhealthy
+   318→  latencyMs   Int
+   319→  message     String?
+   320→  checkedAt   DateTime @default(now())
+   321→
+   322→  @@index([checkName, checkedAt])
+   323→}
+   324→
+   325→// =============================================================================
+   326→// MILESTONE 2 — Identity & Trust Platform
+   327→// =============================================================================
+   328→// Organizations (Government Agencies, NGOs, Researchers), members, invitations,
+   329→// device management, identity verification, trust profiles, role switching,
+   330→// active session management. All designed to extend M1 foundations.
+   331→// =============================================================================
+   332→
+   333→model Organization {
+   334→  id          String   @id @default(cuid())
+   335→  key         String   @unique // slug, e.g. "galamsey-task-force"
+   336→  name        String
+   337→  type        String   // government_agency | ngo | researcher | regulator | community
+   338→  country     String?  // ISO country code e.g. "GH"
+   339→  region      String?
+   340→  description String?
+   341→  logoUrl     String?
+   342→  // status: active | suspended | dissolved | pending_verification
+   343→  status      String   @default("pending_verification")
+   344→  verifiedAt  DateTime?
+   345→  verifiedById String?
+   346→  createdAt   DateTime @default(now())
+   347→  updatedAt   DateTime @updatedAt
+   348→
+   349→  members     OrganizationMember[]
+   350→  invitations OrganizationInvitation[]
+   351→  verifier    User? @relation("OrgVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+   352→  devices     Device[]
+   353→  verifications IdentityVerification[]
+   354→
+   355→  @@index([type])
+   356→  @@index([status])
+   357→  @@index([country])
+   358→}
+   359→
+   360→model OrganizationMember {
+   361→  id            String   @id @default(cuid())
+   362→  organizationId String
+   363→  userId        String
+   364→  // role within the org: owner | admin | member | inspector | moderator | observer
+   365→  role          String   @default("member")
+   366→  // the org role that becomes "active" when the user switches into this org context
+   367→  joinedAt      DateTime @default(now())
+   368→  invitedBy     String?
+   369→  status        String   @default("active") // active | revoked | pending
+   370→  createdAt     DateTime @default(now())
+   371→  updatedAt     DateTime @updatedAt
+   372→
+   373→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   374→  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+   375→
+   376→  @@unique([organizationId, userId])
+   377→  @@index([userId])
+   378→  @@index([organizationId])
+   379→}
+   380→
+   381→model OrganizationInvitation {
+   382→  id             String   @id @default(cuid())
+   383→  organizationId String
+   384→  email          String
+   385→  role           String   @default("member")
+   386→  token          String   @unique
+   387→  invitedById    String
+   388→  // status: pending | accepted | declined | expired | revoked
+   389→  status         String   @default("pending")
+   390→  expiresAt      DateTime
+   391→  acceptedAt     DateTime?
+   392→  acceptedById   String?
+   393→  createdAt      DateTime @default(now())
+   394→
+   395→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   396→  invitedBy    User          @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+   397→
+   398→  @@index([organizationId])
+   399→  @@index([email])
+   400→  @@index([status])
+   401→}
+   402→
+   403→model Device {
+   404→  id            String   @id @default(cuid())
+   405→  userId        String
+   406→  organizationId String?
+   407→  fingerprint   String   @unique // stable device fingerprint (UA + screen + tz hash)
+   408→  label         String?  // user-provided name e.g. "MacBook Pro"
+   409→  platform      String?  // ios | android | macos | windows | linux | web
+   410→  userAgent     String?
+   411→  // status: trusted | active | unverified | revoked | lost
+   412→  status        String   @default("unverified")
+   413→  lastSeenAt    DateTime @default(now())
+   414→  lastSeenIp    String?
+   415→  location      String?  // coarse geo: city, country
+   416→  trustedAt     DateTime?
+   417→  revokedAt     DateTime?
+   418→  revokedReason String?
+   419→  createdAt     DateTime @default(now())
+   420→
+   421→  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+   422→  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+   423→
+   424→  @@index([userId])
+   425→  @@index([organizationId])
+   426→  @@index([status])
+   427→}
+   428→
+   429→model IdentityVerification {
+   430→  id              String   @id @default(cuid())
+   431→  userId          String
+   432→  organizationId  String?
+   433→  // type: government_id | passport | phone_otp | email | address | biometric | organization_docs
+   434→  type            String
+   435→  // status: pending | under_review | approved | rejected | expired
+   436→  status          String   @default("pending")
+   437→  // documentReference: storage key of the uploaded evidence (StoredObject.key)
+   438→  documentReference String?
+   439→  // submitted data payload (JSON): document number (redacted), country, etc.
+   440→  submittedData   String?
+   441→  // reviewer notes / rejection reason
+   442→  reviewerNotes   String?
+   443→  reviewedById    String?
+   444→  submittedAt     DateTime @default(now())
+   445→  reviewedAt      DateTime?
+   446→  expiresAt       DateTime?
+   447→  createdAt       DateTime @default(now())
+   448→  updatedAt       DateTime @updatedAt
+   449→
+   450→  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+   451→  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+   452→
+   453→  @@index([userId])
+   454→  @@index([organizationId])
+   455→  @@index([status])
+   456→  @@index([type])
+   457→}
+   458→
+   459→model TrustProfile {
+   460→  id              String   @id @default(cuid())
+   461→  userId          String   @unique
+   462→  // 0-100 trust score; computed from verifications, activity, reports, disputes
+   463→  score           Int      @default(0)
+   464→  tier            String   @default("unverified") // unverified | basic | verified | trusted | elite
+   465→  // contributing factors (JSON): { verifications: n, reportsSubmitted: n, reportsVerified: n, disputes: n }
+   466→  factors         String?
+   467→  // badges (JSON array): ["id_verified", "org_member", "top_reporter", "early_adopter"]
+   468→  badges          String?
+   469→  lastRecalculatedAt DateTime?
+   470→  createdAt       DateTime @default(now())
+   471→  updatedAt       DateTime @updatedAt
+   472→
+   473→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   474→
+   475→  @@index([score])
+   476→  @@index([tier])
+   477→}
+   478→
+   479→model TrustEvent {
+   480→  id          String   @id @default(cuid())
+   481→  userId      String
+   482→  // type: verification_approved | report_verified | report_rejected | dispute_filed | org_joined | badge_earned | penalty
+   483→  type        String
+   484→  delta       Int      // score change (+5, -10)
+   485→  reason      String?
+   486→  metadata    String?  // JSON
+   487→  createdAt   DateTime @default(now())
+   488→
+   489→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   490→
+   491→  @@index([userId])
+   492→  @@index([type])
+   493→  @@index([createdAt])
+   494→}
+   495→
+   496→model RoleSwitchLog {
+   497→  id          String   @id @default(cuid())
+   498→  userId      String
+   499→  // fromRole / toRole: the RBAC role key the user switched between
+   500→  fromRole    String?
+   501→  toRole      String
+   502→  // contextType: global | organization ; contextId: org id if organization
+   503→  contextType String   @default("global")
+   504→  contextId   String?
+   505→  reason      String?
+   506→  ip          String?
+   507→  switchedAt  DateTime @default(now())
+   508→
+   509→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   510→
+   511→  @@index([userId])
+   512→  @@index([switchedAt])
+   513→}
+   514→
+   515→// Track the user's currently-active role context (for role switching).
+   516→// Stored separately so the user can have multiple sessions with different
+   517→// active roles without affecting other sessions.
+   518→model ActiveRole {
+   519→  id          String   @id @default(cuid())
+   520→  userId      String   @unique
+   521→  roleKey     String   // current active RBAC role
+   522→  contextType String   @default("global") // global | organization
+   523→  contextId   String?  // organization id when contextType=organization
+   524→  setAt       DateTime @default(now())
+   525→
+   526→  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   527→
+   528→  @@index([userId])
+   529→}
+   530→
+   531→// =============================================================================
+   532→// MILESTONE 3 — Geospatial Platform (GIS Engine)
+   533→// =============================================================================
+   534→// PointOfInterest, SpatialRegion (polygons), GeoLayer (map layers).
+   535→//
+   536→// On SQLite (dev): lat/lng stored as Float, geojson as String (JSON).
+   537→// On PostgreSQL+PostGIS (prod): numeric columns + native geography(Point/Polygon)
+   538→// columns added via prisma/sql/postgis.sql (Prisma has no native geometry type).
+   539→// The SpatialQueryService abstracts both: dev uses Haversine + ray-casting in
+   540→// TypeScript; prod delegates to ST_DWithin / ST_Contains / ST_Distance.
+   541→// =============================================================================
+   542→
+   543→model PointOfInterest {
+   544→  id          String   @id @default(cuid())
+   545→  name        String
+   546→  type        String   // mining_site | water_body | forest_reserve | settlement | sensor_station | incident | checkpoint
+   547→  lat         Float
+   548→  lng         Float
+   549→  // geojson: full GeoJSON Feature as JSON string (includes properties, geometry)
+   550→  geojson     String?
+   551→  layerId     String?
+   552→  country     String?  // ISO code e.g. "GH"
+   553→  region      String?
+   554→  status      String   @default("active") // active | monitored | closed | verified | false_positive
+   555→  severity    String?  // low | medium | high | critical (for incidents)
+   556→  metadata    String?  // JSON: { confidence, source, reportCount, ... }
+   557→  createdAt   DateTime @default(now())
+   558→  updatedAt   DateTime @updatedAt
+   559→
+   560→  layer       GeoLayer? @relation(fields: [layerId], references: [id], onDelete: SetNull)
+   561→
+   562→  @@index([type])
+   563→  @@index([status])
+   564→  @@index([country])
+   565→  @@index([layerId])
+   566→  // Composite index for bounding-box queries (lng range then lat range)
+   567→  @@index([lng, lat])
+   568→}
+   569→
+   570→model SpatialRegion {
+   571→  id          String   @id @default(cuid())
+   572→  name        String
+   573→  type        String   // protected_area | forest_reserve | water_body | mining_concession | administrative_boundary | hot_zone
+   574→  // geojson: GeoJSON Polygon/MultiPolygon as JSON string
+   575→  // For dev (SQLite), the polygon coordinates are in geojson. For prod, a
+   576→  // geography(Polygon,4326) column is also added via postgis.sql.
+   577→  geojson     String
+   578→  // bbox: [minLng, minLat, maxLng, maxLat] as JSON for fast pre-filtering
+   579→  bbox        String?
+   580→  areaKm2     Float?
+   581→  country     String?
+   582→  region      String?
+   583→  layerId     String?
+   584→  status      String   @default("active")
+   585→  metadata    String?
+   586→  createdAt   DateTime @default(now())
+   587→  updatedAt   DateTime @updatedAt
+   588→
+   589→  layer       GeoLayer? @relation(fields: [layerId], references: [id], onDelete: SetNull)
+   590→
+   591→  @@index([type])
+   592→  @@index([country])
+   593→  @@index([layerId])
+   594→}
+   595→
+   596→model GeoLayer {
+   597→  id          String   @id @default(cuid())
+   598→  key         String   @unique // e.g. "osm-base", "satellite", "mining-sites", "forest-reserves"
+   599→  name        String
+   600→  type        String   // base | overlay | data | vector
+   601→  source      String   // osm | sentinel | landsat | custom | internal
+   602→  description String?
+   603→  visible     Boolean  @default(true)
+   604→  zIndex      Int      @default(0)
+   605→  opacity     Float    @default(1.0)
+   606→  // config: JSON — tile URL template, style params, etc.
+   607→  // e.g. { "tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "maxZoom": 19 }
+   608→  config      String?
+   609→  createdAt   DateTime @default(now())
+   610→  updatedAt   DateTime @updatedAt
+   611→
+   612→  points      PointOfInterest[]
+   613→  regions     SpatialRegion[]
+   614→
+   615→  @@index([type])
+   616→  @@index([visible])
+   617→}
+   618→
+   619→model GeoTileManifest {
+   620→  id          String   @id @default(cuid())
+   621→  layerId     String
+   622→  z           Int      // zoom level
+   623→  x           Int      // tile column
+   624→  y           Int      // tile row (XYZ scheme)
+   625→  // status: cached | stale | pending | unavailable
+   626→  status      String   @default("pending")
+   627→  etag        String?
+   628→  sizeBytes   Int      @default(0)
+   629→  cachedAt    DateTime?
+   630→  expiresAt   DateTime?
+   631→  createdAt   DateTime @default(now())
+   632→
+   633→  @@unique([layerId, z, x, y])
+   634→  @@index([layerId, z])
+   635→  @@index([status])
+   636→}
+   637→
+   638→// =============================================================================
+   639→// MILESTONE 4 — Digital Twin Core
+   640→// =============================================================================
+   641→// Every environmental object becomes a versioned, related, historical entity.
+   642→// Rather than 11 rigid tables, we use a UNIFIED TwinEntity model with a type
+   643→// discriminator — this is the canonical Digital Twin architecture:
+   644→//
+   645→//   TwinEntity          — the live object (River, Road, Mine, Forest, ...)
+   646→//   TwinEntityVersion   — immutable versioned snapshots (full audit trail)
+   647→//   TwinRelationship    — graph edges between entities (near, contains, affects)
+   648→//   TwinEvent           — timeline of events/state changes per entity
+   649→//
+   650→// Entity types: river, road, mine, forest, community, inspection, event,
+   651→// concession, protected_area, equipment, historical_imagery
+   652→// =============================================================================
+   653→
+   654→model TwinEntity {
+   655→  id              String   @id @default(cuid())
+   656→  key             String   @unique // human-readable unique key, e.g. "river-pra-main"
+   657→  type            String   // river | road | mine | forest | community | inspection | event | concession | protected_area | equipment | historical_imagery
+   658→  name            String
+   659→  description     String?
+   660→  status          String   @default("active") // active | monitored | closed | degraded | historical | planned
+   661→  // geojson: optional GeoJSON geometry (Point, LineString, or Polygon)
+   662→  geojson         String?
+   663→  lat             Float?
+   664→  lng             Float?
+   665→  // metadata: flexible JSON — type-specific attributes (flow_rate for rivers,
+   666→  // capacity for mines, population for communities, capture_date for imagery, etc.)
+   667→  metadata        String?
+   668→  // currentVersion: monotonically increasing version number
+   669→  currentVersion  Int      @default(1)
+   670→  // organizationId: optional owning org (for concessions, equipment, etc.)
+   671→  organizationId  String?
+   672→  country         String?
+   673→  region          String?
+   674→  createdAt       DateTime @default(now())
+   675→  updatedAt       DateTime @updatedAt
+   676→
+   677→  versions        TwinEntityVersion[]
+   678→  events          TwinEvent[]
+   679→  // Relationships — both outgoing (this → other) and incoming (other → this)
+   680→  relationshipsFrom TwinRelationship[] @relation("RelFrom")
+   681→  relationshipsTo   TwinRelationship[] @relation("RelTo")
+   682→
+   683→  @@index([type])
+   684→  @@index([status])
+   685→  @@index([country])
+   686→  @@index([organizationId])
+   687→  @@index([lng, lat])
+   688→}
+   689→
+   690→model TwinEntityVersion {
+   691→  id              String   @id @default(cuid())
+   692→  entityId        String
+   693→  version         Int      // version number (1, 2, 3, ...)
+   694→  // snapshot: full JSON snapshot of the entity state at this version
+   695→  snapshot        String
+   696→  // changeReason: why this version was created (human-readable)
+   697→  changeReason    String?
+   698→  // diff: JSON describing what changed from the previous version
+   699→  diff            String?
+   700→  changedById     String?
+   701→  validFrom       DateTime @default(now())
+   702→  validTo         DateTime?
+   703→  createdAt       DateTime @default(now())
+   704→
+   705→  entity TwinEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+   706→
+   707→  @@unique([entityId, version])
+   708→  @@index([entityId])
+   709→  @@index([validFrom])
+   710→}
+   711→
+   712→model TwinRelationship {
+   713→  id              String   @id @default(cuid())
+   714→  fromEntityId    String
+   715→  toEntityId      String
+   716→  // type: near | contains | within | connects_to | affects | monitors | supplies | borders | upstream | downstream | depends_on | threatens
+   717→  type            String
+   718→  // strength: 0.0–1.0 for weighted relationships (e.g. proximity strength)
+   719→  strength        Float    @default(1.0)
+   720→  // metadata: JSON — relationship-specific data (distance_m, flow_direction, etc.)
+   721→  metadata        String?
+   722→  // bidirectional: if true, the relationship is symmetric (A↔B)
+   723→  bidirectional   Boolean  @default(false)
+   724→  validFrom       DateTime @default(now())
+   725→  validTo         DateTime?
+   726→  createdAt       DateTime @default(now())
+   727→
+   728→  fromEntity TwinEntity @relation("RelFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+   729→  toEntity   TwinEntity @relation("RelTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+   730→
+   731→  @@unique([fromEntityId, toEntityId, type])
+   732→  @@index([fromEntityId])
+   733→  @@index([toEntityId])
+   734→  @@index([type])
+   735→}
+   736→
+   737→model TwinEvent {
+   738→  id              String   @id @default(cuid())
+   739→  entityId        String
+   740→  // type: created | updated | status_changed | inspected | incident | restored | depleted | expanded | reported | verified
+   741→  type            String
+   742→  title           String
+   743→  description     String?
+   744→  // severity: info | low | medium | high | critical
+   745→  severity        String   @default("info")
+   746→  // payload: JSON — event-specific data
+   747→  payload         String?
+   748→  // source: who/what triggered the event (user id, system, sensor, satellite)
+   749→  source          String?
+   750→  sourceType      String   @default("system") // user | system | sensor | satellite | report
+   751→  timestamp       DateTime @default(now())
+   752→  createdAt       DateTime @default(now())
+   753→
+   754→  entity TwinEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+   755→
+   756→  @@index([entityId])
+   757→  @@index([type])
+   758→  @@index([severity])
+   759→  @@index([timestamp])
+   760→}
+   761→
+   762→// =============================================================================
+   763→// MILESTONE 7 — Evidence Platform
+   764→// =============================================================================
+   765→// Universal evidence service supporting images, video, audio, documents, GPS
+   766→// tracks, and arbitrary metadata. Every evidence item is:
+   767→//   - Hashed (SHA-256 content fingerprint)
+   768→//   - Hash-chained (each version references the previous hash → tamper-evident)
+   769→//   - Optionally encrypted (at-rest encryption key stored separately)
+   770→//   - Versioned (immutable version snapshots, same temporal model as Twin)
+   771→//   - GPS-tagged (lat/lng + optional GeoJSON track)
+   772→//   - Metadata-rich (flexible JSON for type-specific attributes)
+   773→// =============================================================================
+   774→
+   775→model Evidence {
+   776→  id              String   @id @default(cuid())
+   777→  key             String   @unique // human-readable key, e.g. "evd-prestea-cyanide-001"
+   778→  title           String
+   779→  description     String?
+   780→  // type: image | video | audio | document | gps_track | sensor_log | report | other
+   781→  type            String
+   782→  // mediaType: MIME type (image/jpeg, video/mp4, audio/mpeg, application/pdf, ...)
+   783→  mediaType       String
+   784→  // storageKey: object storage key (StoredObject.key or external URL)
+   785→  storageKey      String
+   786→  storageProvider String   @default("local")
+   787→  // sizeBytes: file size
+   788→  sizeBytes       Int      @default(0)
+   789→  // checksum: SHA-256 hash of the original content (content fingerprint)
+   790→  checksum        String
+   791→  // currentHash: hash of the current version's content + metadata (hash chain head)
+   792→  currentHash     String
+   793→  // previousHash: hash of the previous version (hash chain link)
+   794→  previousHash    String?
+   795→  // encryption: encryption status + key reference
+   796→  encrypted       Boolean  @default(false)
+   797→  encryptionKeyId String?  // reference to key in the secrets manager (never store the key itself)
+   798→  // GPS: capture location
+   799→  lat             Float?
+   800→  lng             Float?
+   801→  // geojson: optional GeoJSON track (for GPS tracks) or area
+   802→  geojson         String?
+   803→  // metadata: flexible JSON (exif, duration, resolution, deviceInfo, etc.)
+   804→  metadata        String?
+   805→  // currentVersion: monotonically increasing version number
+   806→  currentVersion  Int      @default(1)
+   807→  // ownership + provenance
+   808→  uploadedById    String?
+   809→  organizationId  String?
+   810→  // twinEntityId: optional link to a Digital Twin entity (e.g. inspection evidence)
+   811→  twinEntityId    String?
+   812→  // verification status
+   813→  verified        Boolean  @default(false)
+   814→  verifiedById    String?
+   815→  verifiedAt      DateTime?
+   816→  // chain integrity
+   817→  chainValid      Boolean  @default(true)
+   818→  createdAt       DateTime @default(now())
+   819→  updatedAt       DateTime @updatedAt
+   820→
+   821→  versions        EvidenceVersion[]
+   822→  weight          EvidenceWeight?
+   823→  corroborations  Corroboration[]
+   824→
+   825→  @@index([type])
+   826→  @@index([mediaType])
+   827→  @@index([uploadedById])
+   828→  @@index([organizationId])
+   829→  @@index([twinEntityId])
+   830→  @@index([verified])
+   831→  @@index([lat, lng])
+   832→}
+   833→
+   834→model EvidenceVersion {
+   835→  id              String   @id @default(cuid())
+   836→  evidenceId      String
+   837→  version         Int
+   838→  // snapshot: full JSON snapshot of the evidence state at this version
+   839→  snapshot        String
+   840→  // contentHash: SHA-256 of the content at this version
+   841→  contentHash     String
+   842→  // metadataHash: SHA-256 of the metadata at this version
+   843→  metadataHash    String
+   844→  // combinedHash: SHA-256(contentHash + metadataHash + previousHash) — the chain link
+   845→  combinedHash    String
+   846→  // previousHash: combinedHash of the previous version
+   847→  previousHash    String?
+   848→  // changeReason: why this version was created
+   849→  changeReason    String?
+   850→  // diff: JSON describing what changed
+   851→  diff            String?
+   852→  // storageKey: content storage key at this version (may differ if re-uploaded)
+   853→  storageKey      String
+   854→  sizeBytes       Int
+   855→  changedById     String?
+   856→  validFrom       DateTime @default(now())
+   857→  validTo         DateTime?
+   858→  createdAt       DateTime @default(now())
+   859→
+   860→  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+   861→
+   862→  @@unique([evidenceId, version])
+   863→  @@index([evidenceId])
+   864→  @@index([validFrom])
+   865→}
+   866→
+   867→// =============================================================================
+   868→// MILESTONE 8 — Community Intelligence (Event-Sourced)
+   869→// =============================================================================
+   870→// Users create Intelligence Events, upload evidence, subscribe, comment, watch,
+   871→// share, and follow. EVERYTHING is event-sourced: each action appends an
+   872→// immutable event to the IntelligenceEventStream. The current state is a
+   873→// projection (fold) over the event stream — nothing is mutated in place.
+   874→//
+   875→// Models:
+   876→//   IntelligenceEvent   — the aggregate root (projection of the event stream)
+   877→//   EventStreamEntry    — immutable append-only event log (the source of truth)
+   878→//   EventComment        — comments on an event
+   879→//   EventSubscription   — watch/follow subscriptions
+   880→//   EventShare          — share records
+   881→//   EventProjection     — cached read model (rebuildable from the stream)
+   882→// =============================================================================
+   883→
+   884→model IntelligenceEvent {
+   885→  id              String   @id @default(cuid())
+   886→  key             String   @unique // human-readable key
+   887→  title           String
+   888→  description     String?
+   889→  // type: pollution | deforestation | illegal_mining | water_contamination | land_degradation | wildlife_crime | other
+   890→  type            String
+   891→  status          String   @default("open") // open | investigating | verified | resolved | false_positive
+   892→  severity        String   @default("medium") // low | medium | high | critical
+   893→  // location
+   894→  lat             Float?
+   895→  lng             Float?
+   896→  locationName    String?
+   897→  // ownership
+   898→  createdById     String
+   899→  organizationId  String?
+   900→  twinEntityId    String?
+   901→  // linked evidence
+   902→  evidenceIds     String?  // JSON array of Evidence IDs
+   903→  // projection counters (derived from event stream)
+   904→  commentCount    Int      @default(0)
+   905→  subscriberCount Int      @default(0)
+   906→  watcherCount    Int      @default(0)
+   907→  shareCount      Int      @default(0)
+   908→  viewCount       Int      @default(0)
+   909→  // stream version (optimistic concurrency)
+   910→  streamVersion   Int      @default(0)
+   911→  createdAt       DateTime @default(now())
+   912→  updatedAt       DateTime @updatedAt
+   913→
+   914→  stream          EventStreamEntry[]
+   915→  comments        EventComment[]
+   916→  subscriptions   EventSubscription[]
+   917→  shares          EventShare[]
+   918→
+   919→  @@index([type])
+   920→  @@index([status])
+   921→  @@index([severity])
+   922→  @@index([createdById])
+   923→  @@index([organizationId])
+   924→  @@index([lat, lng])
+   925→  @@index([createdAt])
+   926→}
+   927→
+   928→// The append-only event log — the source of truth. Every action (create,
+   929→// comment, subscribe, share, status change, evidence attach) appends here.
+   930→model EventStreamEntry {
+   931→  id              String   @id @default(cuid())
+   932→  eventId         String
+   933→  version         Int      // monotonically increasing per event
+   934→  // eventType: created | commented | subscribed | unsubscribed | watched | shared | viewed | status_changed | evidence_attached | severity_changed | description_updated
+   935→  eventType       String
+   936→  actorId         String?
+   937→  actorType       String   @default("user") // user | system | sensor | satellite
+   938→  // payload: JSON — event-specific data (comment text, subscriber userId, etc.)
+   939→  payload         String?
+   940→  metadata        String?  // JSON — traceId, ip, userAgent
+   941→  timestamp       DateTime @default(now())
+   942→
+   943→  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   944→
+   945→  @@unique([eventId, version])
+   946→  @@index([eventId])
+   947→  @@index([eventType])
+   948→  @@index([timestamp])
+   949→  @@index([actorId])
+   950→}
+   951→
+   952→model EventComment {
+   953→  id              String   @id @default(cuid())
+   954→  eventId         String
+   955→  authorId        String
+   956→  body            String
+   957→  // parentId: null for top-level, or ID of parent comment for threaded replies
+   958→  parentId        String?
+   959→  // attachments: JSON array of evidence IDs referenced in the comment
+   960→  attachments     String?
+   961→  edited          Boolean  @default(false)
+   962→  editedAt        DateTime?
+   963→  createdAt       DateTime @default(now())
+   964→  updatedAt       DateTime @updatedAt
+   965→
+   966→  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   967→
+   968→  @@index([eventId])
+   969→  @@index([authorId])
+   970→  @@index([parentId])
+   971→}
+   972→
+   973→model EventSubscription {
+   974→  id              String   @id @default(cuid())
+   975→  eventId         String
+   976→  userId          String
+   977→  // type: watch (get notifications) | follow (track in feed) | mute (suppress)
+   978→  type            String   @default("watch")
+   979→  createdAt       DateTime @default(now())
+   980→
+   981→  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   982→
+   983→  @@unique([eventId, userId, type])
+   984→  @@index([eventId])
+   985→  @@index([userId])
+   986→}
+   987→
+   988→model EventShare {
+   989→  id              String   @id @default(cuid())
+   990→  eventId         String
+   991→  sharedById      String
+   992→  // platform: internal | email | twitter | whatsapp | telegram | link
+   993→  platform        String   @default("internal")
+   994→  recipientId     String?  // for internal shares
+   995→  message         String?
+   996→  createdAt       DateTime @default(now())
+   997→
+   998→  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   999→
+  1000→  @@index([eventId])
+  1001→  @@index([sharedById])
+  1002→}
+  1003→
+  1004→// =============================================================================
+  1005→// MILESTONE 9 — Evidence Corroboration Engine
+  1006→// =============================================================================
+  1007→// Instead of simple up/down votes, evidence is assessed through:
+  1008→//   - Support (corroboration by another user/source)
+  1009→//   - Dispute (challenge by another user/source)
+  1010→//   - Independent corroboration (multiple independent sources confirm)
+  1011→//   - Duplicate detection (same content hash, location, or time proximity)
+  1012→//   - Witness confidence (weighted by trust tier + corroboration count)
+  1013→//   - Evidence weighting (reliability score from all factors)
+  1014→// =============================================================================
+  1015→
+  1016→model Corroboration {
+  1017→  id              String   @id @default(cuid())
+  1018→  evidenceId      String
+  1019→  userId          String
+  1020→  // type: support | dispute
+  1021→  type            String
+  1022→  // strength: 0.0–1.0 — how strongly the user supports/disputes (based on trust tier)
+  1023→  strength        Float    @default(0.5)
+  1024→  // reason: why the user supports/disputes
+  1025→  reason          String?
+  1026→  // isIndependent: true if this corroboration is from an independent source
+  1027→  // (different organization, different device, no relationship to original submitter)
+  1028→  isIndependent   Boolean  @default(false)
+  1029→  // corroborationEvidenceId: optional link to corroborating evidence the user uploaded
+  1030→  corroboratingEvidenceId String?
+  1031→  metadata        String?  // JSON
+  1032→  createdAt       DateTime @default(now())
+  1033→
+  1034→  evidence        Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  1035→
+  1036→  @@unique([evidenceId, userId, type])
+  1037→  @@index([evidenceId])
+  1038→  @@index([userId])
+  1039→  @@index([type])
+  1040→}
+  1041→
+  1042→model DuplicateGroup {
+  1043→  id              String   @id @default(cuid())
+  1044→  // evidenceIds: JSON array of evidence IDs that are duplicates of each other
+  1045→  evidenceIds     String
+  1046→  // detectionMethod: hash_match | location_proximity | time_proximity | content_similarity
+  1047→  detectionMethod String
+  1048→  // confidence: 0.0–1.0 — how confident the duplicate detection is
+  1049→  confidence      Float    @default(0.5)
+  1050→  // metadata: JSON — detection details (distance_m, time_diff_sec, hash_prefix, etc.)
+  1051→  metadata        String?
+  1052→  status          String   @default("detected") // detected | confirmed | dismissed
+  1053→  createdAt       DateTime @default(now())
+  1054→
+  1055→  @@index([detectionMethod])
+  1056→  @@index([status])
+  1057→}
+  1058→
+  1059→model EvidenceWeight {
+  1060→  id              String   @id @default(cuid())
+  1061→  evidenceId      String   @unique
+  1062→  // weight: 0.0–1.0 — the overall reliability weight of this evidence
+  1063→  weight          Float    @default(0.5)
+  1064→  evidence        Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  1065→  // confidence: 0.0–1.0 — witness confidence score
+  1066→  confidence      Float    @default(0.5)
+  1067→  // factors: JSON breakdown of how the weight was computed
+  1068→  // { baseTrust, supportCount, disputeCount, independentCorroboration, duplicatePenalty, verificationBonus }
+  1069→  factors         String?
+  1070→  // supportCount / disputeCount: derived from Corroboration table
+  1071→  supportCount    Int      @default(0)
+  1072→  disputeCount    Int      @default(0)
+  1073→  independentCount Int     @default(0)
+  1074→  // tier: unverified | weak | moderate | strong | confirmed
+  1075→  tier            String   @default("unverified")
+  1076→  lastCalculatedAt DateTime?
+  1077→  createdAt       DateTime @default(now())
+  1078→  updatedAt       DateTime @updatedAt
+  1079→
+  1080→  @@index([weight])
+  1081→  @@index([tier])
+  1082→  @@index([confidence])
+  1083→}
+  1084→
+  1085→// =============================================================================
+  1086→// MILESTONE 10 — Civil Trust Engine
+  1087→// =============================================================================
+  1088→// Production trust system replacing simple reputation. Tracks 8 factors:
+  1089→//   1. Accuracy       — verified reports / total reports
+  1090→//   2. Reliability    — consistency over time (report frequency + verification rate)
+  1091→//   3. False reports  — count of false-positive submissions (penalty)
+  1092→//   4. Evidence quality — aggregate from M9 evidence weights
+  1093→//   5. Contribution quality — comment/event quality (corroboration support rate)
+  1094→//   6. Community impact  — positive impact (resolutions, helpful shares)
+  1095→//   7. Decay          — trust decays if inactive (half-life 90 days)
+  1096→//   8. Fraud resistance — fraud flags reduce trust; clean history boosts it
+  1097→// =============================================================================
+  1098→
+  1099→model TrustFactor {
+  1100→  id              String   @id @default(cuid())
+  1101→  userId          String   @unique
+  1102→  // Core metrics (each 0.0–1.0 unless noted)
+  1103→  accuracy        Float    @default(0.5)   // verified / total reports
+  1104→  reliability     Float    @default(0.5)   // consistency score
+  1105→  falseReportRate Float    @default(0.0)   // false reports / total reports
+  1106→  falseReportCount Int     @default(0)
+  1107→  evidenceQuality Float    @default(0.5)   // avg evidence weight (M9)
+  1108→  contributionQuality Float @default(0.5)  // corroboration support rate
+  1109→  communityImpact Float    @default(0.0)   // positive impact score
+  1110→  fraudResistance Float    @default(1.0)   // 1.0 = clean, decreases per flag
+  1111→  fraudFlagCount  Int      @default(0)
+  1112→  // Activity metrics
+  1113→  totalReports    Int      @default(0)
+  1114→  verifiedReports Int      @default(0)
+  1115→  totalEvidence   Int      @default(0)
+  1116→  totalComments   Int      @default(0)
+  1117→  totalShares     Int      @default(0)
+  1118→  lastActivityAt  DateTime?
+  1119→  // Decay tracking
+  1120→  decayRate       Float    @default(0.0)   // current decay multiplier (0.0 = no decay, 1.0 = full)
+  1121→  lastDecayAt     DateTime?
+  1122→  // Computed composite
+  1123→  compositeScore  Float    @default(0.0)   // final 0.0–1.0 trust score
+  1124→  tier            String   @default("unverified") // unverified | basic | verified | trusted | elite
+  1125→  factors         String?  // JSON breakdown of how composite was computed
+  1126→  lastCalculatedAt DateTime?
+  1127→  createdAt       DateTime @default(now())
+  1128→  updatedAt       DateTime @updatedAt
+  1129→
+  1130→  @@index([compositeScore])
+  1131→  @@index([tier])
+  1132→  @@index([accuracy])
+  1133→}
+  1134→
+  1135→model TrustDecayLog {
+  1136→  id              String   @id @default(cuid())
+  1137→  userId          String
+  1138→  // previousScore / newScore after decay
+  1139→  previousScore   Float
+  1140→  newScore        Float
+  1141→  decayAmount     Float
+  1142→  // daysInactive: days since last activity
+  1143→  daysInactive    Int
+  1144→  // decayRate applied
+  1145→  decayRate       Float
+  1146→  appliedAt       DateTime @default(now())
+  1147→
+  1148→  @@index([userId])
+  1149→  @@index([appliedAt])
+  1150→}
+  1151→
+  1152→model FraudFlag {
+  1153→  id              String   @id @default(cuid())
+  1154→  userId          String
+  1155→  // type: duplicate_spam | false_report | coordinated_manipulation | bot_behavior | identity_theft | other
+  1156→  type            String
+  1157→  // severity: low | medium | high | critical
+  1158→  severity        String   @default("medium")
+  1159→  description     String
+  1160→  // evidence: JSON array of evidence/event IDs supporting the flag
+  1161→  evidence        String?
+  1162→  // status: detected | investigating | confirmed | dismissed | resolved
+  1163→  status          String   @default("detected")
+  1164→  detectedAt      DateTime @default(now())
+  1165→  resolvedAt      DateTime?
+  1166→  resolvedById    String?
+  1167→  resolution      String?
+  1168→  // penalty: trust score penalty applied (0.0–1.0)
+  1169→  penalty         Float    @default(0.0)
+  1170→  createdAt       DateTime @default(now())
+  1171→
+  1172→  @@index([userId])
+  1173→  @@index([type])
+  1174→  @@index([status])
+  1175→  @@index([severity])
+  1176→}
+  1177→
+  1178→// =============================================================================
+  1179→// MILESTONE 11 — Notification Platform
+  1180→// =============================================================================
+  1181→// Multi-channel notification system: Push, Email, SMS, In-app.
+  1182→// Supports geofenced subscriptions, interest subscriptions, digest mode,
+  1183→// and priority notifications.
+  1184→// =============================================================================
+  1185→
+  1186→model NotificationChannel {
+  1187→  id              String   @id @default(cuid())
+  1188→  userId          String
+  1189→  // type: push | email | sms | in_app
+  1190→  type            String
+  1191→  // address: device token (push), email address, phone number, or null for in_app
+  1192→  address         String?
+  1193→  // isVerified: whether the channel has been verified (email/SMS confirmation)
+  1194→  isVerified      Boolean  @default(false)
+  1195→  // isEnabled: user can disable a channel without deleting it
+  1196→  isEnabled       Boolean  @default(true)
+  1197→  // preferences: JSON — per-channel preferences (quiet hours, min priority, etc.)
+  1198→  preferences     String?
+  1199→  createdAt       DateTime @default(now())
+  1200→  updatedAt       DateTime @updatedAt
+  1201→
+  1202→  @@unique([userId, type, address])
+  1203→  @@index([userId])
+  1204→  @@index([type])
+  1205→}
+  1206→
+  1207→model NotificationSubscription {
+  1208→  id              String   @id @default(cuid())
+  1209→  userId          String
+  1210→  // subscriptionType: geofence | interest | event_type | entity
+  1211→  subscriptionType String
+  1212→  // target: for geofence = GeoJSON polygon JSON; for interest = topic key;
+  1213→  //         for event_type = "intelligence.created" etc; for entity = entity ID
+  1214→  target          String
+  1215→  // channels: JSON array of channel types to notify via ["push","email","sms","in_app"]
+  1216→  channels        String   @default("[\"in_app\"]")
+  1217→  // minPriority: only notify for notifications >= this priority (0=low, 1=normal, 2=high, 3=critical)
+  1218→  minPriority     Int      @default(0)
+  1219→  // digestMode: none | hourly | daily | weekly
+  1220→  digestMode      String   @default("none")
+  1221→  // isActive
+  1222→  isActive        Boolean  @default(true)
+  1223→  // metadata: JSON — subscription-specific config (radius_m, topics, etc.)
+  1224→  metadata        String?
+  1225→  createdAt       DateTime @default(now())
+  1226→
+  1227→  @@unique([userId, subscriptionType, target])
+  1228→  @@index([userId])
+  1229→  @@index([subscriptionType])
+  1230→  @@index([isActive])
+  1231→}
+  1232→
+  1233→model Notification {
+  1234→  id              String   @id @default(cuid())
+  1235→  userId          String
+  1236→  // type: intelligence_event | evidence_upload | trust_change | corroboration | system | alert | digest
+  1237→  type            String
+  1238→  title           String
+  1239→  body            String
+  1240→  // priority: 0=low, 1=normal, 2=high, 3=critical
+  1241→  priority        Int      @default(1)
+  1242→  // channels: JSON array of channels this was sent via
+  1243→  channels        String   @default("[\"in_app\"]")
+  1244→  // data: JSON — payload (eventId, evidenceId, link, etc.)
+  1245→  data            String?
+  1246→  // read status
+  1247→  isRead          Boolean  @default(false)
+  1248→  readAt          DateTime?
+  1249→  // delivery status per channel: JSON [{ channel, status, deliveredAt, error }]
+  1250→  deliveryStatus  String?
+  1251→  // source: what triggered this notification
+  1252→  source          String   @default("system") // system | event_bus | manual | digest
+  1253→  // geofence match (if applicable)
+  1254→  matchedGeofence String?
+  1255→  createdAt       DateTime @default(now())
+  1256→
+  1257→  @@index([userId])
+  1258→  @@index([type])
+  1259→  @@index([priority])
+  1260→  @@index([isRead])
+  1261→  @@index([createdAt])
+  1262→}
+  1263→
+  1264→model NotificationDigest {
+  1265→  id              String   @id @default(cuid())
+  1266→  userId          String
+  1267→  // period: hourly | daily | weekly
+  1268→  period          String
+  1269→  // startTime / endTime: the time range this digest covers
+  1270→  startTime       DateTime
+  1271→  endTime         DateTime
+  1272→  // notificationIds: JSON array of notification IDs included in this digest
+  1273→  notificationIds String
+  1274→  // count: number of notifications in this digest
+  1275→  count           Int      @default(0)
+  1276→  // status: pending | sent | failed
+  1277→  status          String   @default("pending")
+  1278→  sentAt          DateTime?
+  1279→  // channels: JSON array of channels the digest was sent via
+  1280→  channels        String?
+  1281→  createdAt       DateTime @default(now())
+  1282→
+  1283→  @@index([userId])
+  1284→  @@index([status])
+  1285→  @@index([period])
+  1286→}
+  1287→
+  1288→model GeofenceSubscription {
+  1289→  id              String   @id @default(cuid())
+  1290→  userId          String
+  1291→  name            String
+  1292→  // geojson: GeoJSON Polygon defining the geofence boundary
+  1293→  geojson         String
+  1294→  // centerLat / centerLng: centroid for quick distance checks
+  1295→  centerLat       Float
+  1296→  centerLng       Float
+  1297→  // radiusM: radius in meters (for circular geofences, used with center)
+  1298→  radiusM         Float?
+  1299→  // channels: JSON array of channels
+  1300→  channels        String   @default("[\"push\",\"in_app\"]")
+  1301→  // minPriority: minimum priority to trigger
+  1302→  minPriority     Int      @default(1)
+  1303→  // eventTypes: JSON array of event types that trigger this geofence
+  1304→  eventTypes      String?
+  1305→  isActive        Boolean  @default(true)
+  1306→  createdAt       DateTime @default(now())
+  1307→
+  1308→  @@index([userId])
+  1309→  @@index([isActive])
+  1310→  @@index([centerLat, centerLng])
+  1311→}
+  1312→
+  1313→// =============================================================================
+  1314→// MILESTONE 12 — Satellite Ingestion
+  1315→// =============================================================================
+  1316→// Satellite imagery ingestion pipeline: Sentinel-2, Landsat-8.
+  1317→// Raster processing → tiling → caching → historical archive.
+  1318→// Scheduled acquisition with metadata tracking.
+  1319→// =============================================================================
+  1320→
+  1321→model SatelliteScene {
+  1322→  id              String   @id @default(cuid())
+  1323→  sceneId         String   @unique // official scene ID (e.g. "S2A_MSIL2A_20240715T103021_N0509_R108_T30NWN")
+  1324→  satellite       String   // sentinel2 | landsat8 | sentinel1 | landsat9
+  1325→  sensor          String   // MSI (Sentinel-2) | OLI_TIRS (Landsat-8)
+  1326→  // acquisition
+  1327→  acquisitionDate DateTime
+  1328→  cloudCover      Float    @default(0) // percentage 0-100
+  1329→  sunAzimuth      Float?
+  1330→  sunElevation    Float?
+  1331→  // spatial
+  1332→  crs             String   @default("EPSG:4326")
+  1333→  bbox            String   // JSON [minLng, minLat, maxLng, maxLat]
+  1334→  centerLat       Float
+  1335→  centerLng       Float
+  1336→  // resolution
+  1337→  resolutionM     Float    @default(10) // meters per pixel
+  1338→  // processing
+  1339→  // status: scheduled | downloading | processing | tiling | caching | ready | archived | failed
+  1340→  status          String   @default("scheduled")
+  1341→  processingStage String   @default("pending") // pending | downloaded | rectified | tiled | cached | archived
+  1342→  // storage
+  1343→  rawStorageKey   String?  // raw downloaded data storage key
+  1344→  tiledStorageKey String?  // tiled data storage prefix
+  1345→  thumbnailKey    String?
+  1346→  sizeBytes       Int      @default(0)
+  1347→  // metadata
+  1348→  bands           String?  // JSON array of band info
+  1349→  metadata        String?  // JSON — full scene metadata
+  1350→  // scheduling
+  1351→  scheduledById   String?
+  1352→  processedAt     DateTime?
+  1353→  createdAt       DateTime @default(now())
+  1354→  updatedAt       DateTime @updatedAt
+  1355→
+  1356→  tiles           RasterTile[]
+  1357→  schedule        IngestionSchedule?
+  1358→
+  1359→  @@index([satellite])
+  1360→  @@index([status])
+  1361→  @@index([acquisitionDate])
+  1362→  @@index([centerLat, centerLng])
+  1363→  @@index([cloudCover])
+  1364→}
+  1365→
+  1366→model RasterTile {
+  1367→  id              String   @id @default(cuid())
+  1368→  sceneId         String
+  1369→  z               Int      // zoom level
+  1370→  x               Int      // tile column (XYZ scheme)
+  1371→  y               Int      // tile row (XYZ scheme)
+  1372→  quadkey         String   // Bing quadkey for spatial indexing
+  1373→  // storage
+  1374→  storageKey      String   // object storage key
+  1375→  sizeBytes       Int      @default(0)
+  1376→  contentType     String   @default("image/png")
+  1377→  // cache
+  1378→  // cacheStatus: cached | stale | evicted | pending
+  1379→  cacheStatus     String   @default("pending")
+  1380→  cachedAt        DateTime?
+  1381→  expiresAt       DateTime?
+  1382→  accessCount     Int      @default(0)
+  1383→  lastAccessedAt  DateTime?
+  1384→  // tile metadata
+  1385→  bands           String?  // JSON — which bands are in this tile
+  1386→  checksum        String?  // SHA-256 for integrity
+  1387→  createdAt       DateTime @default(now())
+  1388→
+  1389→  scene           SatelliteScene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  1390→
+  1391→  @@unique([sceneId, z, x, y])
+  1392→  @@index([sceneId, z])
+  1393→  @@index([cacheStatus])
+  1394→  @@index([quadkey])
+  1395→  @@index([z, x, y])
+  1396→}
+  1397→
+  1398→model IngestionSchedule {
+  1399→  id              String   @id @default(cuid())
+  1400→  name            String
+  1401→  satellite       String   // sentinel2 | landsat8
+  1402→  // area of interest
+  1403→  bbox            String   // JSON [minLng, minLat, maxLng, maxLat]
+  1404→  centerLat       Float
+  1405→  centerLng       Float
+  1406→  // schedule
+  1407→  // frequency: daily | weekly | monthly | manual
+  1408→  frequency       String   @default("weekly")
+  1409→  cronExpression  String?  // e.g. "0 6 * * 1" = every Monday 6AM
+  1410→  nextRunAt       DateTime?
+  1411→  lastRunAt       DateTime?
+  1412→  // filters
+  1413→  maxCloudCover   Float    @default(20) // max cloud cover %
+  1414→  minResolutionM  Float    @default(10)
+  1415→  bands           String?  // JSON — requested bands
+  1416→  // status
+  1417→  isActive        Boolean  @default(true)
+  1418→  createdById     String?
+  1419→  // linked scene (last ingested)
+  1420→  lastSceneId     String?  @unique
+  1421→  createdAt       DateTime @default(now())
+  1422→  updatedAt       DateTime @updatedAt
+  1423→
+  1424→  lastScene       SatelliteScene? @relation(fields: [lastSceneId], references: [id], onDelete: SetNull)
+  1425→
+  1426→  @@index([satellite])
+  1427→  @@index([isActive])
+  1428→  @@index([nextRunAt])
+  1429→}
+  1430→
+  1431→model TileCacheStats {
+  1432→  id              String   @id @default(cuid())
+  1433→  // aggregate cache statistics (updated periodically)
+  1434→  totalTiles      Int      @default(0)
+  1435→  cachedTiles     Int      @default(0)
+  1436→  staleTiles      Int      @default(0)
+  1437→  evictedTiles    Int      @default(0)
+  1438→  totalCacheBytes Int      @default(0)
+  1439→  hitRate         Float    @default(0) // 0.0-1.0
+  1440→  missRate        Float    @default(0)
+  1441→  // eviction policy
+  1442→  maxCacheSizeGb  Float    @default(10) // max cache size in GB
+  1443→  evictionPolicy  String   @default("lru") // lru | lfu | fifo
+  1444→  lastEvictionAt  DateTime?
+  1445→  computedAt      DateTime @default(now())
+  1446→
+  1447→  @@index([computedAt])
+  1448→}
+  1449→
+  1450→// =============================================================================
+  1451→// MILESTONE 13 — Computer Vision Platform
+  1452→// =============================================================================
+  1453→// Real AI detection using VLM (Vision Language Model) via z-ai-web-dev-sdk.
+  1454→// Detects: excavation, roads, tailings, forest_loss, water_changes, buildings, equipment.
+  1455→// =============================================================================
+  1456→
+  1457→model DetectionResult {
+  1458→  id              String   @id @default(cuid())
+  1459→  // source: the image/scene that was analyzed
+  1460→  sceneId         String?  // link to SatelliteScene (optional)
+  1461→  evidenceId      String?  // link to Evidence (optional)
+  1462→  imageUrl        String   // URL or data URI of the analyzed image
+  1463→  // detection type
+  1464→  type            String   // excavation | roads | tailings | forest_loss | water_changes | buildings | equipment
+  1465→  // AI result
+  1466→  detected        Boolean  // whether the feature was detected
+  1467→  confidence      Float    @default(0) // 0.0-1.0
+  1468→  // structured output from VLM
+  1469→  description     String?  // AI-generated description of what was detected
+  1470→  boundingBoxes   String?  // JSON array of {x, y, width, height, label, confidence}
+  1471→  severity        String?  // low | medium | high | critical (for environmental damage assessment)
+  1472→  area            String?  // JSON: { areaHectares, percentage }
+  1473→  // model metadata
+  1474→  model           String   @default("vlm-zai") // which model performed the detection
+  1475→  prompt          String?  // the prompt used
+  1476→  processingMs    Int      @default(0) // processing time in ms
+  1477→  // raw VLM response (for audit)
+  1478→  rawResponse     String?  // full VLM response text
+  1479→  // status
+  1480→  status          String   @default("completed") // pending | processing | completed | failed
+  1481→  error           String?
+  1482→  // user/system
+  1483→  triggeredBy     String?  // user ID or "system" / "schedule"
+  1484→  createdAt       DateTime @default(now())
+  1485→
+  1486→  @@index([type])
+  1487→  @@index([detected])
+  1488→  @@index([confidence])
+  1489→  @@index([sceneId])
+  1490→  @@index([evidenceId])
+  1491→  @@index([createdAt])
+  1492→}
+  1493→
+  1494→model DetectionBatch {
+  1495→  id              String   @id @default(cuid())
+  1496→  name            String
+  1497→  // batchType: scene_analysis | evidence_analysis | change_detection | scheduled
+  1498→  batchType       String   @default("scene_analysis")
+  1499→  // targets: JSON array of image URLs or scene IDs
+  1500→  targets         String
+  1501→  // detection types to run
+  1502→  detectionTypes  String   // JSON array
+  1503→  // results
+  1504→  resultCount     Int      @default(0)
+  1505→  detectedCount   Int      @default(0)
+  1506→  // status: pending | processing | completed | failed
+  1507→  status          String   @default("pending")
+  1508→  startedAt       DateTime?
+  1509→  completedAt     DateTime?
+  1510→  error           String?
+  1511→  triggeredBy     String?
+  1512→  createdAt       DateTime @default(now())
+  1513→
+  1514→  @@index([status])
+  1515→  @@index([batchType])
+  1516→}
+  1517→
+  1518→// =============================================================================
+  1519→// MILESTONE 14 — AI Observation Engine
+  1520→// =============================================================================
+  1521→// AI creates Intelligence Events from CV detection results. Each observation
+  1522→// stores: evidence (linked detection results), confidence, reasoning (AI-generated
+  1523→// explanation), affected entities (twin entities impacted), and historical
+  1524→// comparison (comparison with past observations of the same area/type).
+  1525→// =============================================================================
+  1526→
+  1527→model AIObservation {
+  1528→  id              String   @id @default(cuid())
+  1529→  // source: the CV detection that triggered this observation
+  1530→  detectionResultId String?
+  1531→  // linked intelligence event (created by this observation)
+  1532→  intelligenceEventId String?
+  1533→  // observation metadata
+  1534→  title           String
+  1535→  summary         String   // AI-generated one-line summary
+  1536→  // type: matches the detection type (excavation, forest_loss, etc.)
+  1537→  type            String
+  1538→  severity        String   // low | medium | high | critical
+  1539→  confidence      Float    // 0.0-1.0 (from detection, may be adjusted)
+  1540→  // AI reasoning — the full chain of thought explaining why this observation was made
+  1541→  reasoning       String   // structured reasoning text
+  1542→  reasoningSteps  String?  // JSON array of reasoning steps
+  1543→  // evidence — linked detection results supporting this observation
+  1544→  evidenceIds     String?  // JSON array of detection result IDs
+  1545→  evidenceSummary String?  // summary of supporting evidence
+  1546→  // affected entities — twin entities impacted by this observation
+  1547→  affectedEntityIds String? // JSON array of twin entity IDs
+  1548→  affectedEntitiesSummary String? // human-readable summary of affected entities
+  1549→  // historical comparison — comparison with past observations
+  1550→  historicalComparison String? // JSON: { previousObservations: [...], trend: "increasing|decreasing|stable|new", changePercent: number }
+  1551→  // metadata
+  1552→  model           String   @default("vlm-zai")
+  1553→  imageUrl        String?  // the image that was analyzed
+  1554→  location        String?  // JSON { lat, lng, name }
+  1555→  processingMs    Int      @default(0)
+  1556→  // status: pending | processed | published | dismissed
+  1557→  status          String   @default("published")
+  1558→  createdAt       DateTime @default(now())
+  1559→
+  1560→  @@index([type])
+  1561→  @@index([severity])
+  1562→  @@index([confidence])
+  1563→  @@index([status])
+  1564→  @@index([detectionResultId])
+  1565→  @@index([intelligenceEventId])
+  1566→  @@index([createdAt])
+  1567→}
+  1568→
+  1569→// =============================================================================
+  1570→// MILESTONE 15 — Evidence Fusion Engine
+  1571→// =============================================================================
+  1572→// Merges evidence from multiple sources (AI, Citizens, Satellite, Drone,
+  1573→// Sensors, Government inspections) into one fused confidence score.
+  1574→// Uses weighted Bayesian fusion with conflict detection.
+  1575→// =============================================================================
+  1576→
+  1577→model FusionSource {
+  1578→  id              String   @id @default(cuid())
+  1579→  fusionResultId  String
+  1580→  // sourceType: ai_detection | citizen_report | satellite_imagery | drone_survey | sensor_log | government_inspection | corroboration
+  1581→  sourceType      String
+  1582→  // sourceId: reference to the source record (detection result ID, evidence ID, intel event ID, etc.)
+  1583→  sourceId        String?
+  1584→  // raw confidence from this source (0.0-1.0)
+  1585→  rawConfidence   Float
+  1586→  // weight assigned to this source type (0.0-1.0, based on source reliability)
+  1587→  weight          Float
+  1588→  // weighted contribution to the fused score
+  1589→  weightedScore   Float
+  1590→  // metadata
+  1591→  description     String?
+  1592→  sourceTimestamp DateTime?
+  1593→  metadata        String?  // JSON
+  1594→  createdAt       DateTime @default(now())
+  1595→
+  1596→  fusionResult    FusionResult @relation(fields: [fusionResultId], references: [id], onDelete: Cascade)
+  1597→
+  1598→  @@index([fusionResultId])
+  1599→  @@index([sourceType])
+  1600→}
+  1601→
+  1602→model FusionResult {
+  1603→  id              String   @id @default(cuid())
+  1604→  // target: what is being fused (e.g. an intelligence event, a twin entity, a location)
+  1605→  targetType      String   // intelligence_event | twin_entity | location | observation
+  1606→  targetId        String?
+  1607→  // the fused confidence (0.0-1.0) — the single number from merging all sources
+  1608→  fusedConfidence Float    @default(0)
+  1609→  // fused severity
+  1610→  fusedSeverity   String   @default("medium") // low | medium | high | critical
+  1611→  // number of sources fused
+  1612→  sourceCount     Int      @default(0)
+  1613→  // source breakdown
+  1614→  sourceBreakdown String   // JSON: { ai: n, citizen: n, satellite: n, drone: n, sensor: n, government: n }
+  1615→  // conflict detection
+  1616→  hasConflict     Boolean  @default(false)
+  1617→  conflictDetails String?  // JSON: { sources: [...], spread: number, description: string }
+  1618→  // consensus
+  1619→  consensusLevel  String   @default("unanimous") // unanimous | strong | moderate | weak | divided
+  1620→  // location (optional — for spatial fusion)
+  1621→  lat             Float?
+  1622→  lng             Float?
+  1623→  locationName    String?
+  1624→  // linked intelligence event
+  1625→  intelligenceEventId String?
+  1626→  // metadata
+  1627→  algorithm       String   @default("weighted_bayesian")
+  1628→  metadata        String?  // JSON
+  1629→  createdAt       DateTime @default(now())
+  1630→
+  1631→  sources         FusionSource[]
+  1632→
+  1633→  @@index([targetType])
+  1634→  @@index([fusedConfidence])
+  1635→  @@index([hasConflict])
+  1636→  @@index([consensusLevel])
+  1637→  @@index([createdAt])
+  1638→}
+  1639→
+  1640→// =============================================================================
+  1641→// MILESTONE 16 — Environmental Intelligence
+  1642→// =============================================================================
+  1643→// Predictive analytics for environmental impact modeling:
+  1644→// sediment flow, river impact, forest loss, downstream effects, protected area risk.
+  1645→// Uses real data from M4 twin entities, M6 knowledge graph, M12 satellite,
+  1646→// M13 CV detections, and M15 fusion results.
+  1647→// =============================================================================
+  1648→
+  1649→model EnvironmentalPrediction {
+  1650→  id              String   @id @default(cuid())
+  1651→  // type: sediment | river_impact | forest_loss | downstream_effects | protected_area_risk
+  1652→  type            String
+  1653→  // target entity (river, forest, protected area, mine)
+  1654→  targetEntityId  String?
+  1655→  targetName      String
+  1656→  targetType      String   // river | forest | protected_area | mine | community
+  1657→  // prediction
+  1658→  prediction      String   // human-readable prediction text
+  1659→  riskScore       Float    @default(0) // 0.0-1.0 (0=safe, 1=critical)
+  1660→  riskLevel       String   @default("low") // low | moderate | high | critical
+  1661→  confidence      Float    @default(0) // 0.0-1.0
+  1662→  // timeline: when the impact is expected
+  1663→  timeframe       String   @default("immediate") // immediate | 1-3 months | 3-6 months | 6-12 months | 1+ years
+  1664→  // factors: JSON breakdown of what drives the prediction
+  1665→  factors         String   // JSON: { factor_name: { value, weight, contribution } }
+  1666→  // input data references
+  1667→  inputEntityIds  String?  // JSON array of twin entity IDs used
+  1668→  inputSatelliteScenes String? // JSON array of satellite scene IDs
+  1669→  inputDetections String?  // JSON array of detection result IDs
+  1670→  inputFusionIds  String?  // JSON array of fusion result IDs
+  1671→  // affected entities (predicted impact zone)
+  1672→  affectedEntities String? // JSON: [{ entityId, name, type, impactLevel }]
+  1673→  // metadata
+  1674→  model           String   @default("env-intel-v1")
+  1675→  algorithm       String   @default("weighted_multi_factor")
+  1676→  metadata        String?  // JSON
+  1677→  createdAt       DateTime @default(now())
+  1678→
+  1679→  @@index([type])
+  1680→  @@index([riskLevel])
+  1681→  @@index([riskScore])
+  1682→  @@index([targetEntityId])
+  1683→  @@index([createdAt])
+  1684→}
+  1685→
+  1686→// =============================================================================
+  1687→// MILESTONE 17 — Prediction Engine
+  1688→// =============================================================================
+  1689→// Predicts illegal mining hotspots and future expansion with probability,
+  1690→// confidence, and full explainability. Uses spatial clustering of existing
+  1691→// mines, CV detections, environmental predictions, and satellite data.
+  1692→// =============================================================================
+  1693→
+  1694→model HotspotPrediction {
+  1695→  id              String   @id @default(cuid())
+  1696→  // type: hotspot | expansion
+  1697→  type            String
+  1698→  // location
+  1699→  lat             Float
+  1700→  lng             Float
+  1701→  locationName    String?
+  1702→  // prediction
+  1703→  prediction      String   // human-readable
+  1704→  probability     Float    @default(0) // 0.0-1.0 — likelihood of illegal mining
+  1705→  confidence      Float    @default(0) // 0.0-1.0 — model confidence in the prediction
+  1706→  riskLevel       String   @default("low") // low | moderate | high | critical
+  1707→  // expansion forecast
+  1708→  expansionDirection String? // N | NE | E | SE | S | SW | W | NW | radial
+  1709→  expansionRadiusKm Float?  // predicted expansion radius in km
+  1710→  expansionTimeframe String? // immediate | 1-3 months | 3-6 months | 6-12 months
+  1711→  // explainability — full breakdown of WHY this prediction was made
+  1712→  explanation     String   // structured explanation text
+  1713→  explanationSteps String? // JSON array of step-by-step reasoning
+  1714→  factors         String   // JSON: [{ name, value, weight, contribution, description }]
+  1715→  // input data
+  1716→  inputMineIds    String?  // JSON array of mine entity IDs
+  1717→  inputDetectionIds String? // JSON array of CV detection IDs
+  1718→  inputPredictionIds String? // JSON array of environmental prediction IDs
+  1719→  inputSatelliteIds String? // JSON array of satellite scene IDs
+  1720→  inputFusionIds  String?  // JSON array of fusion result IDs
+  1721→  // nearby entities at risk
+  1722→  atRiskEntities  String?  // JSON: [{ entityId, name, type, distanceKm, riskLevel }]
+  1723→  // model metadata
+  1724→  model           String   @default("hotspot-v1")
+  1725→  algorithm       String   @default("spatial_cluster_bayesian")
+  1726→  metadata        String?  // JSON
+  1727→  createdAt       DateTime @default(now())
+  1728→
+  1729→  @@index([type])
+  1730→  @@index([riskLevel])
+  1731→  @@index([probability])
+  1732→  @@index([confidence])
+  1733→  @@index([lat, lng])
+  1734→  @@index([createdAt])
+  1735→}
+  1736→
+  1737→// =============================================================================
+  1738→// MILESTONE 18 — Digital Twin AI Copilot
+  1739→// =============================================================================
+  1740→// Natural language interface to the Digital Twin. Users ask questions like
+  1741→// "Show illegal mining near Pra River" or "Why is this event high confidence?"
+  1742→// and the copilot uses the LLM + real platform data to answer.
+  1743→// =============================================================================
+  1744→
+  1745→model CopilotConversation {
+  1746→  id              String   @id @default(cuid())
+  1747→  userId          String?
+  1748→  title           String   @default("New Conversation")
+  1749→  // context: JSON — what entities/events the conversation is about
+  1750→  context         String?  // JSON: { entityIds: [], eventIds: [], type: "" }
+  1751→  messageCount    Int      @default(0)
+  1752→  createdAt       DateTime @default(now())
+  1753→  updatedAt       DateTime @updatedAt
+  1754→
+  1755→  messages        CopilotMessage[]
+  1756→
+  1757→  @@index([userId])
+  1758→  @@index([createdAt])
+  1759→}
+  1760→
+  1761→model CopilotMessage {
+  1762→  id              String   @id @default(cuid())
+  1763→  conversationId  String
+  1764→  // role: user | assistant
+  1765→  role            String
+  1766→  content         String
+  1767→  // context data retrieved for this query (JSON)
+  1768→  retrievedData   String?  // JSON: summary of data fetched from the platform
+  1769→  // entities referenced in the response
+  1770→  referencedEntities String? // JSON array of entity IDs
+  1771→  referencedEvents String?  // JSON array of event IDs
+  1772→  // model metadata
+  1773→  model           String   @default("llm-zai")
+  1774→  processingMs    Int      @default(0)
+  1775→  createdAt       DateTime @default(now())
+  1776→
+  1777→  conversation    CopilotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  1778→
+  1779→  @@index([conversationId])
+  1780→  @@index([role])
+  1781→  @@index([createdAt])
+  1782→}
+  1783→
+  1784→// =============================================================================
+  1785→// MILESTONE 19 — Mission System
+  1786→// =============================================================================
+  1787→// When confidence is low, AI creates missions to gather additional evidence.
+  1788→// Example: "Need additional evidence within 500m of Pra River contamination."
+  1789→// Nearby trusted users receive the mission. Mission rewards depend on
+  1790→// verification quality — higher trust tier + better evidence = bigger reward.
+  1791→// =============================================================================
+  1792→
+  1793→model Mission {
+  1794→  id              String   @id @default(cuid())
+  1795→  key             String   @unique
+  1796→  title           String
+  1797→  description     String
+  1798→  // AI-generated mission instructions
+  1799→  instructions    String   // what the user should do (e.g. "Photograph the water at this GPS location")
+  1800→  // type: evidence_gathering | verification | inspection | drone_survey | sensor_check | witness_interview
+  1801→  type            String   @default("evidence_gathering")
+  1802→  // priority: low | medium | high | urgent
+  1803→  priority        String   @default("medium")
+  1804→  // trigger: what caused this mission to be created
+  1805→  triggerType     String   @default("low_confidence") // low_confidence | conflict_detected | ai_observation | manual
+  1806→  triggerId       String?  // fusion result ID, observation ID, etc.
+  1807→  triggerDescription String? // "Fused confidence 45% — need more evidence"
+  1808→  // target location
+  1809→  lat             Float?
+  1810→  lng             Float?
+  1811→  radiusM         Int      @default(500) // radius in meters for "within 500m"
+  1812→  locationName    String?
+  1813→  // linked entities
+  1814→  intelligenceEventId String?
+  1815→  twinEntityId    String?
+  1816→  // reward system
+  1817→  baseReward      Int      @default(100) // base reward in trust points
+  1818→  maxReward       Int      @default(500) // max reward with quality bonus
+  1819→  rewardCurrency  String   @default("trust_points")
+  1820→  // reward modifiers based on verification quality
+  1821→  qualityMultiplier Float  @default(1.0) // 0.5-2.0 based on evidence quality
+  1822→  // status: open | assigned | in_progress | submitted | verified | completed | expired | cancelled
+  1823→  status          String   @default("open")
+  1824→  // timing
+  1825→  expiresAt       DateTime?
+  1826→  acceptedAt      DateTime?
+  1827→  submittedAt     DateTime?
+  1828→  verifiedAt      DateTime?
+  1829→  completedAt     DateTime?
+  1830→  // assignment
+  1831→  assignedToId    String?  // user assigned to the mission
+  1832→  assignedAt      DateTime?
+  1833→  // submission
+  1834→  submissionNotes String?
+  1835→  submissionEvidenceIds String? // JSON array of evidence IDs submitted
+  1836→  submissionLat   Float?
+  1837→  submissionLng   Float?
+  1838→  // verification
+  1839→  verifiedById    String?
+  1840→  verificationNotes String?
+  1841→  verificationQuality String? // low | medium | high | excellent
+  1842→  actualReward    Int?     // final reward paid (base × quality multiplier)
+  1843→  // AI metadata
+  1844→  model           String   @default("mission-ai-v1")
+  1845→  metadata        String?  // JSON
+  1846→  createdAt       DateTime @default(now())
+  1847→  updatedAt       DateTime @updatedAt
+  1848→
+  1849→  @@index([status])
+  1850→  @@index([type])
+  1851→  @@index([priority])
+  1852→  @@index([assignedToId])
+  1853→  @@index([triggerType])
+  1854→  @@index([lat, lng])
+  1855→  @@index([createdAt])
+  1856→}
+  1857→
+  1858→model MissionAssignment {
+  1859→  id              String   @id @default(cuid())
+  1860→  missionId       String
+  1861→  userId          String
+  1862→  // assignment status: offered | accepted | declined | expired
+  1863→  status          String   @default("offered")
+  1864→  // user's trust tier when offered (affects eligibility)
+  1865→  userTrustTier   String   @default("basic")
+  1866→  userDistanceKm  Float?   // distance from user to mission location
+  1867→  // notification
+  1868→  notifiedAt      DateTime @default(now())
+  1869→  respondedAt     DateTime?
+  1870→  createdAt       DateTime @default(now())
+  1871→
+  1872→  @@unique([missionId, userId])
+  1873→  @@index([missionId])
+  1874→  @@index([userId])
+  1875→  @@index([status])
+  1876→}
+  1877→
+  1878→model MissionRewardLog {
+  1879→  id              String   @id @default(cuid())
+  1880→  missionId       String
+  1881→  userId          String
+  1882→  // reward details
+  1883→  baseReward      Int
+  1884→  qualityMultiplier Float
+  1885→  actualReward    Int
+  1886→  qualityLevel    String   // low | medium | high | excellent
+  1887→  // trust impact
+  1888→  trustPointsAwarded Int
+  1889→  // metadata
+  1890→  awardedAt       DateTime @default(now())
+  1891→  metadata        String?  // JSON
+  1892→
+  1893→  @@index([missionId])
+  1894→  @@index([userId])
+  1895→  @@index([awardedAt])
+  1896→}
+  1897→
+  1898→// =============================================================================
+  1899→// MILESTONE 20 — Reward Engine
+  1900→// =============================================================================
+  1901→// Transparent reward distribution from donation pools, NGO funding, and
+  1902→// government grants. No cryptocurrency — fiat-based with audit ledger.
+  1903→// Event-specific contribution scoring ensures fair, merit-based payouts.
+  1904→// =============================================================================
+  1905→
+  1906→model RewardPool {
+  1907→  id              String   @id @default(cuid())
+  1908→  key             String   @unique
+  1909→  name            String
+  1910→  description     String?
+  1911→  // type: donation | ngo_funding | government_grant | mission_rewards | community_fund
+  1912→  type            String
+  1913→  // source: who provided the funds
+  1914→  sourceName      String   // e.g. "WACAM Ghana", "EPA Ghana", "UNDP"
+  1915→  sourceType      String   // ngo | government | international | community | individual
+  1916→  sourceOrganizationId String?
+  1917→  // funds
+  1918→  totalFunds      Float    @default(0) // total deposited (in GHS — Ghana Cedis)
+  1919→  availableFunds  Float    @default(0) // remaining after distributions
+  1920→  distributedFunds Float   @default(0) // cumulative distributed
+  1921→  currency        String   @default("GHS")
+  1922→  // allocation rules
+  1923→  // distributionModel: proportional | equal | merit_based | first_come
+  1924→  distributionModel String @default("merit_based")
+  1925→  // event-specific: if linked to an intelligence event, contributions are scored per event
+  1926→  intelligenceEventId String?
+  1927→  // status: active | depleted | paused | closed
+  1928→  status          String   @default("active")
+  1929→  // transparency
+  1930→  isPublic        Boolean  @default(true)
+  1931→  // timing
+  1932→  opensAt         DateTime?
+  1933→  closesAt        DateTime?
+  1934→  createdAt       DateTime @default(now())
+  1935→  updatedAt       DateTime @updatedAt
+  1936→
+  1937→  contributions   RewardContribution[]
+  1938→  distributions   RewardDistribution[]
+  1939→  ledger          RewardLedger[]
+  1940→
+  1941→  @@index([type])
+  1942→  @@index([status])
+  1943→  @@index([sourceType])
+  1944→  @@index([intelligenceEventId])
+  1945→}
+  1946→
+  1947→model RewardContribution {
+  1948→  id              String   @id @default(cuid())
+  1949→  poolId          String
+  1950→  userId          String?
+  1951→  organizationId  String?
+  1952→  // contributor info
+  1953→  contributorName String
+  1954→  contributorType String   // user | ngo | government | international | community
+  1955→  // contribution
+  1956→  amount          Float    // amount contributed (GHS)
+  1957→  currency        String   @default("GHS")
+  1958→  // contribution score: how much this contribution is "worth" in the merit system
+  1959→  // Factors: trust tier of contributor × amount × evidence quality multiplier
+  1960→  contributionScore Float  @default(0)
+  1961→  // what the contribution is for (specific evidence, mission, or general)
+  1962→  contributionType String  @default("financial") // financial | evidence | mission_completion | verification | referral
+  1963→  // linked evidence/mission (if applicable)
+  1964→  evidenceId      String?
+  1965→  missionId       String?
+  1966→  // metadata
+  1967→  description     String?
+  1968→  metadata        String?  // JSON
+  1969→  createdAt       DateTime @default(now())
+  1970→
+  1971→  pool            RewardPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  1972→
+  1973→  @@index([poolId])
+  1974→  @@index([userId])
+  1975→  @@index([contributionType])
+  1976→  @@index([createdAt])
+  1977→}
+  1978→
+  1979→model RewardDistribution {
+  1980→  id              String   @id @default(cuid())
+  1981→  poolId          String
+  1982→  recipientId     String   // user ID receiving the reward
+  1983→  recipientName   String
+  1984→  recipientTrustTier String?
+  1985→  // amount
+  1986→  amount          Float    // amount distributed (GHS)
+  1987→  currency        String   @default("GHS")
+  1988→  // distribution basis
+  1989→  distributionModel String  // merit_based | proportional | equal | first_come
+  1990→  contributionScore Float   // the score that earned this distribution
+  1991→  qualityLevel    String?   // low | medium | high | excellent (from mission verification)
+  1992→  // linked mission/event
+  1993→  missionId       String?
+  1994→  intelligenceEventId String?
+  1995→  // transparency
+  1996→  transactionRef  String?  // bank transfer / mobile money reference
+  1997→  distributedById String?  // who authorized the distribution
+  1998→  distributedAt   DateTime @default(now())
+  1999→  // status: pending | processing | completed | failed | reversed
+  2000→  status          String   @default("completed")
+
+[showing lines 1-2000 of 3617; use offset=2001 with limit to continue reading]
