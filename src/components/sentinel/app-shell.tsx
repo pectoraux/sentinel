@@ -49,7 +49,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import {
   Card,
   CardContent,
@@ -365,13 +365,13 @@ export function AppShell({ children }: AppShellProps) {
   // Render
   // ---------------------------------------------------------------------
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex min-h-screen bg-background text-foreground">
       {/* Desktop sidebar */}
       {!isMobile && (
         <aside
           aria-label="Primary navigation"
           className={cn(
-            "relative flex h-full shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
+            "fixed inset-y-0 left-0 z-40 flex h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
             collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED,
           )}
         >
@@ -406,7 +406,7 @@ export function AppShell({ children }: AppShellProps) {
       </Sheet>
 
       {/* Main column */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn("flex min-h-screen min-w-0 flex-1 flex-col", !isMobile && (collapsed ? "ml-[68px]" : "ml-[256px]"))}>
         <ShellHeader
           roleConfig={roleConfig}
           activeItem={activeItem}
@@ -423,7 +423,7 @@ export function AppShell({ children }: AppShellProps) {
           theme={theme}
         />
 
-        <ScrollArea className="flex-1">
+        <main className="flex-1">
           <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
             <ShellHero roleConfig={roleConfig} activeItem={activeItem} />
             <div className="mt-6">
@@ -437,7 +437,7 @@ export function AppShell({ children }: AppShellProps) {
             </div>
             <ShellFooter />
           </div>
-        </ScrollArea>
+        </main>
       </div>
 
       <CommandPalette
@@ -555,7 +555,7 @@ function SidebarContent({
         </div>
 
         {/* Nav groups */}
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto">
           <nav
             aria-label="Sections"
             className={cn("flex flex-col gap-1 px-3 pb-4", collapsed && "px-2")}
@@ -592,7 +592,7 @@ function SidebarContent({
               </div>
             ))}
           </nav>
-        </ScrollArea>
+        </div>
 
         {/* Footer — role switcher */}
         <div
@@ -1009,7 +1009,7 @@ function NotificationsMenu({ unreadCount }: { unreadCount: number }) {
             {unreadCount} new
           </Badge>
         </div>
-        <ScrollArea className="max-h-80">
+        <div className="max-h-80 overflow-y-auto">
           <ul className="flex flex-col">
             {NOTIFICATIONS.map((n) => {
               const Icon = n.icon;
@@ -1053,7 +1053,7 @@ function NotificationsMenu({ unreadCount }: { unreadCount: number }) {
               );
             })}
           </ul>
-        </ScrollArea>
+        </div>
         <div className="border-t p-2">
           <Button
             variant="ghost"
