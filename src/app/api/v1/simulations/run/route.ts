@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { withHandler, errorJson } from "@/lib/api";
 import { getSimulationService } from "@/modules/simulation";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export const POST = withHandler(async (req: NextRequest) => {
   const body = (await req.json().catch(() => null)) as {
