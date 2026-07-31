@@ -46,16 +46,17 @@ import { TemporalDashboard } from "@/components/sentinel/twin/temporal-dashboard
 import { KnowledgeGraphDashboard } from "@/components/sentinel/twin/knowledge-graph-dashboard";
 import { EvidenceDashboard } from "@/components/sentinel/evidence/evidence-dashboard";
 import { IntelligenceDashboard } from "@/components/sentinel/intelligence/intelligence-dashboard";
+import { CorroborationDashboard } from "@/components/sentinel/corroboration/corroboration-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
-import { getEvidenceService } from "@/modules/evidence";
+import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
 import { getIntelligenceService } from "@/modules/intelligence";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Fetch ALL dashboard data server-side in parallel (M1–M8).
+  // Fetch ALL dashboard data server-side in parallel (M1–M9).
   const [
     health,
     flags,
@@ -73,6 +74,7 @@ export default async function DashboardPage() {
     kgAnalytics,
     evidenceSummary,
     intelSummary,
+    corroborationSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -90,6 +92,7 @@ export default async function DashboardPage() {
     getKnowledgeGraphService().analytics(),
     getEvidenceService().summary(),
     getIntelligenceService().summary(),
+    getCorroborationService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -171,7 +174,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M8 · Community Intelligence
+                  M9 · Corroboration
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -200,13 +203,14 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Community Intelligence
+                Evidence Corroboration Engine
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Users create intelligence events, upload evidence, subscribe, comment,
-                watch, share, and follow. Everything is event-sourced — each action
-                appends an immutable event to the stream. The current state is a
-                projection (fold) over the event log. Nothing is mutated in place.
+                Instead of up/down votes: support, dispute, independent corroboration,
+                duplicate detection, witness confidence, and evidence weighting.
+                Every evidence item gets a reliability weight computed from multiple
+                factors — submitter trust, corroboration count, independent sources,
+                disputes, duplicates, and verification status.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -221,22 +225,25 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M8: Community Intelligence (first child = first tab, default) === */}
+          {/* === M9: Corroboration Engine (first child = first tab, default) === */}
+          <CorroborationDashboard initialSummary={corroborationSummary} />
+
+          {/* === M8: Community Intelligence (second child = second tab) === */}
           <IntelligenceDashboard initialSummary={intelSummary} />
 
-          {/* === M7: Evidence Platform (second child = second tab) === */}
+          {/* === M7: Evidence Platform (third child = third tab) === */}
           <EvidenceDashboard initialSummary={evidenceSummary} />
 
-          {/* === M6: Knowledge Graph (third child = third tab) === */}
+          {/* === M6: Knowledge Graph (fourth child = fourth tab) === */}
           <KnowledgeGraphDashboard initialAnalytics={kgAnalytics} initialGraph={kgGraph} />
 
-          {/* === M5: Temporal Engine (fourth child = fourth tab) === */}
+          {/* === M5: Temporal Engine (fifth child = fifth tab) === */}
           <TemporalDashboard initialSummary={temporalSummary} />
 
-          {/* === M4: Digital Twin (fifth child = fifth tab) === */}
+          {/* === M4: Digital Twin (sixth child = sixth tab) === */}
           <TwinDashboard initialSummary={twinSummary} initialGraph={twinGraph} />
 
-          {/* === M3: Geospatial (sixth child = sixth tab) === */}
+          {/* === M3: Geospatial (seventh child = seventh tab) === */}
           <GeospatialDashboard
             initialSummary={geoSummary}
             initialPois={geoPois}
@@ -244,10 +251,10 @@ export default async function DashboardPage() {
             initialLayers={geoLayers}
           />
 
-          {/* === M2: Identity & Trust (seventh child = seventh tab) === */}
+          {/* === M2: Identity & Trust (eighth child = eighth tab) === */}
           <IdentityDashboard initial={identitySummaryRaw} />
 
-          {/* === M1: Foundation (eighth child = eighth tab) === */}
+          {/* === M1: Foundation (ninth child = ninth tab) === */}
           <div>
             {/* KPI row */}
             <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -505,8 +512,12 @@ export default async function DashboardPage() {
                     "M8: Subscribe · Watch · Follow · Share · Comment",
                     "M8: Append-Only Event Stream · Projection Fold",
                     "M8: Evidence Attachment + Threaded Comments",
-                    "M9: Intelligence Engine (next)",
-                    "M10: Predictive Analytics (next)",
+                    "M9: Corroboration Engine (Support/Dispute)",
+                    "M9: Independent Corroboration + Duplicate Detection",
+                    "M9: Witness Confidence + Evidence Weighting",
+                    "M9: 5-Tier System (Unverified→Confirmed)",
+                    "M10: Intelligence Engine (next)",
+                    "M11: Predictive Analytics (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -525,12 +536,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M8 — Community Intelligence</span>
+            <span>Sentinel Platform · M9 — Corroboration</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/evidence/corroboration-summary" className="hover:text-foreground transition-colors">Corroboration</Link>
             <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
             <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
             <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>

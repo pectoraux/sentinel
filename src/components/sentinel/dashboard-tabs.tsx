@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "corroboration", label: "Corroboration Engine", icon: Scale, description: "M9 · Support · Dispute · Independent corroboration · Duplicate detection · Witness confidence · Evidence weighting", short: "M9" },
   { id: "intel", label: "Community Intelligence", icon: Radio, description: "M8 · Event-sourced · Subscribe · Comment · Share · Follow", short: "M8" },
   { id: "evidence", label: "Evidence Platform", icon: FileText, description: "M7 · Hashing · Tamper detection · Encryption · Versioning", short: "M7" },
   { id: "kg", label: "Knowledge Graph", icon: Network, description: "M6 · Graph traversal · Path finding · Centrality", short: "M6" },
@@ -24,17 +25,18 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("intel");
+  const [active, setActive] = React.useState<string>("corroboration");
 
   const childrenArray = React.Children.toArray(children);
-  const intel = childrenArray[0] ?? null;
-  const evidence = childrenArray[1] ?? null;
-  const kg = childrenArray[2] ?? null;
-  const temporal = childrenArray[3] ?? null;
-  const twin = childrenArray[4] ?? null;
-  const geo = childrenArray[5] ?? null;
-  const identity = childrenArray[6] ?? null;
-  const foundation = childrenArray[7] ?? null;
+  const corroboration = childrenArray[0] ?? null;
+  const intel = childrenArray[1] ?? null;
+  const evidence = childrenArray[2] ?? null;
+  const kg = childrenArray[3] ?? null;
+  const temporal = childrenArray[4] ?? null;
+  const twin = childrenArray[5] ?? null;
+  const geo = childrenArray[6] ?? null;
+  const identity = childrenArray[7] ?? null;
+  const foundation = childrenArray[8] ?? null;
 
   return (
     <div>
@@ -71,6 +73,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "corroboration" && corroboration}
         {active === "intel" && intel}
         {active === "evidence" && evidence}
         {active === "kg" && kg}

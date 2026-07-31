@@ -819,6 +819,8 @@ model Evidence {
   updatedAt       DateTime @updatedAt
 
   versions        EvidenceVersion[]
+  weight          EvidenceWeight?
+  corroborations  Corroboration[]
 
   @@index([type])
   @@index([mediaType])
@@ -997,4 +999,85 @@ model EventShare {
 
   @@index([eventId])
   @@index([sharedById])
+}
+
+// =============================================================================
+// MILESTONE 9 — Evidence Corroboration Engine
+// =============================================================================
+// Instead of simple up/down votes, evidence is assessed through:
+//   - Support (corroboration by another user/source)
+//   - Dispute (challenge by another user/source)
+//   - Independent corroboration (multiple independent sources confirm)
+//   - Duplicate detection (same content hash, location, or time proximity)
+//   - Witness confidence (weighted by trust tier + corroboration count)
+//   - Evidence weighting (reliability score from all factors)
+// =============================================================================
+
+model Corroboration {
+  id              String   @id @default(cuid())
+  evidenceId      String
+  userId          String
+  // type: support | dispute
+  type            String
+  // strength: 0.0–1.0 — how strongly the user supports/disputes (based on trust tier)
+  strength        Float    @default(0.5)
+  // reason: why the user supports/disputes
+  reason          String?
+  // isIndependent: true if this corroboration is from an independent source
+  // (different organization, different device, no relationship to original submitter)
+  isIndependent   Boolean  @default(false)
+  // corroborationEvidenceId: optional link to corroborating evidence the user uploaded
+  corroboratingEvidenceId String?
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  evidence        Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([evidenceId, userId, type])
+  @@index([evidenceId])
+  @@index([userId])
+  @@index([type])
+}
+
+model DuplicateGroup {
+  id              String   @id @default(cuid())
+  // evidenceIds: JSON array of evidence IDs that are duplicates of each other
+  evidenceIds     String
+  // detectionMethod: hash_match | location_proximity | time_proximity | content_similarity
+  detectionMethod String
+  // confidence: 0.0–1.0 — how confident the duplicate detection is
+  confidence      Float    @default(0.5)
+  // metadata: JSON — detection details (distance_m, time_diff_sec, hash_prefix, etc.)
+  metadata        String?
+  status          String   @default("detected") // detected | confirmed | dismissed
+  createdAt       DateTime @default(now())
+
+  @@index([detectionMethod])
+  @@index([status])
+}
+
+model EvidenceWeight {
+  id              String   @id @default(cuid())
+  evidenceId      String   @unique
+  // weight: 0.0–1.0 — the overall reliability weight of this evidence
+  weight          Float    @default(0.5)
+  evidence        Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  // confidence: 0.0–1.0 — witness confidence score
+  confidence      Float    @default(0.5)
+  // factors: JSON breakdown of how the weight was computed
+  // { baseTrust, supportCount, disputeCount, independentCorroboration, duplicatePenalty, verificationBonus }
+  factors         String?
+  // supportCount / disputeCount: derived from Corroboration table
+  supportCount    Int      @default(0)
+  disputeCount    Int      @default(0)
+  independentCount Int     @default(0)
+  // tier: unverified | weak | moderate | strong | confirmed
+  tier            String   @default("unverified")
+  lastCalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([weight])
+  @@index([tier])
+  @@index([confidence])
 }

@@ -352,3 +352,51 @@ Stage Summary:
 - Delivered: "Everything event sourced." Users create intelligence events, upload evidence, subscribe (watch/follow/mute), comment (threaded with evidence attachments), share (multi-platform), and follow. Every action appends an immutable event to the EventStreamEntry log — the source of truth. The current state (IntelligenceEvent projection) is a fold over the stream. Nothing is mutated in place.
 - 5 events, 16 comments, 17 subscriptions, 8 shares, 46 event stream entries — all temporally spread and queryable.
 - The Community Intelligence module integrates with: M5 Temporal Engine (stream entries have timestamps → time-travel replay), M7 Evidence Platform (comments attach evidence), M6 Knowledge Graph (events link to twin entities), M4 Digital Twin (events update twin entity state).
+
+---
+Task ID: M9
+Agent: orchestrator
+Task: Milestone 9 — Evidence Corroboration Engine
+
+Work Log:
+- Extended Prisma schema (both SQLite + PostgreSQL) with 3 new models: Corroboration (support/dispute with strength/isIndependent/reason/corroboratingEvidenceId), DuplicateGroup (evidenceIds JSON + detectionMethod + confidence + metadata + status), EvidenceWeight (evidenceId unique + weight + confidence + factors JSON + supportCount/disputeCount/independentCount + tier + lastCalculatedAt). Added proper relations: Evidence ↔ Corroboration (one-to-many), Evidence ↔ EvidenceWeight (one-to-one).
+- Built corroboration domain (src/modules/evidence/domain/corroboration/weighting.ts):
+  - Weight tiers: unverified (0-0.3) → weak (0.3-0.5) → moderate (0.5-0.7) → strong (0.7-0.85) → confirmed (0.85+)
+  - computeWeight(): multi-factor weight formula — baseTrust (submitter trust score) + supportBonus (+0.05 per support, max +0.3) - disputePenalty (-0.08 per dispute, max -0.4) + independentBonus (+0.1 per independent, max +0.3) - duplicatePenalty (-0.15) + verificationBonus (+0.15). Confidence = baseTrust*0.4 + independentBonus + supportBonus*0.5.
+  - detectDuplicate(): 4 detection methods — hash_match (exact content, confidence 1.0), location_proximity (same type + within 50m + within 1 hour, confidence 0.85), time_proximity (same type + mediaType + within 5 min, confidence 0.75), content_similarity (same type + same checksum prefix, confidence 0.6). Uses Haversine distance for GPS proximity.
+  - checkIndependence(): a corroboration is "independent" if the corroborator is from a different organization, different device, and has no graph relationship (M6) to the submitter. Prevents collusion from inflating confidence.
+- Built CorroborationService (src/modules/evidence/application/services/corroboration.service.ts):
+  - support(): create corroboration record with independence check + trust-tier-based strength + reason + optional corroborating evidence link; auto-recomputes weight
+  - dispute(): create dispute record with reason + trust-based strength; auto-recomputes weight
+  - removeCorroboration(): delete support/dispute; recompute weight
+  - recomputeWeight(): load evidence + submitter trust + support/dispute/independent counts + duplicate status + verified status → compute weight via domain formula → upsert EvidenceWeight record with factors breakdown
+  - detectDuplicates(): pairwise comparison of all evidence items using 4 detection methods → creates DuplicateGroup records
+  - getCorroboration(): load supports + disputes + weight for an evidence item
+  - getDuplicates(): list all duplicate groups
+  - getWeight(): get or compute the evidence weight
+  - summary(): aggregate metrics (supports, disputes, independent, duplicateGroups, weightedEvidence, tierDistribution, topEvidence with weight/confidence/tier/counts)
+- Built 7 API routes: evidence/[id]/corroborate (POST support, DELETE remove), evidence/[id]/dispute (POST dispute, DELETE remove), evidence/[id]/confidence (GET corroboration details + weight), evidence/duplicates (GET list, POST run detection), evidence/corroboration-summary (GET aggregate metrics).
+- Seed: 9 corroboration records (7 supports + 2 disputes across 3 evidence items), 4 independent corroborations, 1 duplicate group (location_proximity between cyanide photo and drone video), 8 evidence weights (all 8 evidence items scored — verified evidence gets +0.15 verification bonus → confirmed tier).
+- UI: Built CorroborationDashboard component with:
+  - 6 KPIs (supports, disputes, independent, duplicate groups, weighted evidence, confirmed count)
+  - Evidence Weight Rankings — top 10 evidence items by weight with tier badge, support/dispute/independent/confidence counts, click to select
+  - Corroboration Detail panel — weight visualization bar + tier badge, weight factors breakdown (baseTrust, supportBonus, disputePenalty, independentBonus, duplicatePenalty, verificationBonus), supports list (with independent flags + reasons + strength), disputes list (with reasons + strength)
+  - Duplicate Detection panel — duplicate groups with detection method (color-coded), confidence %, evidence count, metadata
+  - Evidence Tier Distribution — bar chart showing confirmed/strong/moderate/weak/unverified counts
+  - Weighting Model explanation — visual breakdown of each factor: Support (+0.05), Dispute (-0.08), Independent (+0.1), Duplicate (-0.15), Verification (+0.15)
+- Updated DashboardTabs to 9 tabs (Corroboration Engine default, Community Intelligence, Evidence, Knowledge Graph, Temporal, Digital Twin, Geospatial, Identity & Trust, Platform Foundation). Updated hero, header badge, footer, checklist, API info directory.
+- Fixed: added Evidence ↔ Corroboration and Evidence ↔ EvidenceWeight relations to both schemas (Prisma validation required back-relations).
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification (single session):
+  • All corroboration API endpoints return HTTP 200.
+  • Summary: 7 supports, 2 disputes, 4 independent corroborations, 1 duplicate group, 8 weighted evidence, 8 confirmed tier.
+  • Corroboration Engine tab (default): all 6 sections render (Weight Rankings, Detail, Duplicate Detection, Tier Distribution, Weighting Model, KPIs).
+  • KPIs: Supports=7, Disputes=2, Independent=4, Duplicate Groups=1, Weighted=8, Confirmed=8.
+  • 9 tabs switch correctly (Corroboration → Community Intelligence).
+  • No console errors.
+
+Stage Summary:
+- Milestone 9 (Evidence Corroboration Engine) is COMPLETE and browser-verified.
+- Delivered: "Instead of up/down votes." Evidence is assessed through Support, Dispute, Independent corroboration, Duplicate detection, Witness confidence, and Evidence weighting. Every evidence item gets a multi-factor reliability weight (0-100%) and a 5-tier classification (unverified → weak → moderate → strong → confirmed). Duplicate detection runs 4 methods (hash_match, location_proximity, time_proximity, content_similarity). Independence checking prevents collusion by verifying different org/device/no graph relationship.
+- 9 corroboration records (7 supports + 2 disputes), 4 independent, 1 duplicate group, 8 weighted evidence items.
+- The Corroboration Engine integrates with: M2 Trust Profiles (submitter trust score feeds into baseTrust), M6 Knowledge Graph (independence check via graph relationships), M7 Evidence Platform (hash chains + checksums for duplicate detection), M8 Community Intelligence (corroboration events can stream to the event log).

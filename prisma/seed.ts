@@ -1262,8 +1262,157 @@ async function seedEvidenceData() {
 
   console.log(`[seed] Seeded ${count} evidence items (images, video, audio, documents, GPS, sensor logs) with hash chains and version history.`);
 
+  console.log("[seed] Seeding M9 corroboration data...");
+  await seedCorroborationData();
+
   console.log("[seed] Seeding M8 community intelligence data...");
   await seedIntelligenceData();
+}
+
+// ---------------------------------------------------------------------------
+// M9 — Evidence Corroboration seed data
+// ---------------------------------------------------------------------------
+
+async function seedCorroborationData() {
+  const evidence = await prisma.evidence.findMany({ select: { id: true, key: true, uploadedById: true, organizationId: true, verified: true, checksum: true, lat: true, lng: true, type: true, mediaType: true, createdAt: true } });
+  if (evidence.length < 3) return;
+
+  const users = await prisma.user.findMany({ select: { id: true, email: true } });
+  if (users.length < 3) return;
+
+  // Get trust profiles for strength
+  const trustProfiles = await prisma.trustProfile.findMany({ select: { userId: true, score: true } });
+  const trustMap = new Map(trustProfiles.map((t) => [t.userId, t.score]));
+
+  // Support/dispute the first few evidence items
+  const ev0 = evidence[0]!; // Cyanide drone photo
+  const ev1 = evidence[1]!; // Water sample lab report
+  const ev2 = evidence[2]!; // Obuasi drone video
+
+  // Supports for ev0 (cyanide photo) — 3 supports, 2 independent
+  for (let i = 1; i <= 3; i++) {
+    const user = users[i]!;
+    const strength = (trustMap.get(user.id) ?? 50) / 100;
+    const isIndependent = i <= 2; // first 2 are independent
+    await prisma.corroboration.create({
+      data: {
+        evidenceId: ev0.id,
+        userId: user.id,
+        type: "support",
+        strength,
+        reason: i === 1 ? "I witnessed the spill myself — this photo accurately depicts the contamination." : i === 2 ? "Our sensor data confirms elevated cyanide levels at this location." : "This matches our field observations.",
+        isIndependent,
+      },
+    }).catch(() => {});
+  }
+
+  // 1 dispute for ev0
+  await prisma.corroboration.create({
+    data: {
+      evidenceId: ev0.id,
+      userId: users[4]!.id,
+      type: "dispute",
+      strength: 0.6,
+      reason: "The photo angle suggests this may be from a different location. Requesting GPS metadata verification.",
+    },
+  }).catch(() => {});
+
+  // Supports for ev1 (lab report) — 2 supports, 1 independent
+  for (let i = 2; i <= 3; i++) {
+    const user = users[i]!;
+    const strength = (trustMap.get(user.id) ?? 50) / 100;
+    await prisma.corroboration.create({
+      data: {
+        evidenceId: ev1.id,
+        userId: user.id,
+        type: "support",
+        strength,
+        reason: i === 2 ? "Lab results are consistent with our independent water sampling." : "The mercury levels match our sensor readings.",
+        isIndependent: i === 2,
+      },
+    }).catch(() => {});
+  }
+
+  // Supports for ev2 (drone video) — 2 supports
+  for (let i = 1; i <= 2; i++) {
+    const user = users[i]!;
+    const strength = (trustMap.get(user.id) ?? 50) / 100;
+    await prisma.corroboration.create({
+      data: {
+        evidenceId: ev2.id,
+        userId: user.id,
+        type: "support",
+        strength,
+        reason: "Drone footage clearly shows the pit expansion.",
+        isIndependent: i === 1,
+      },
+    }).catch(() => {});
+  }
+
+  // 1 dispute for ev2
+  await prisma.corroboration.create({
+    data: {
+      evidenceId: ev2.id,
+      userId: users[3]!.id,
+      type: "dispute",
+      strength: 0.5,
+      reason: "The timestamp doesn't match the claimed survey date. Needs verification.",
+    },
+  }).catch(() => {});
+
+  // Create a duplicate group (ev0 and ev5 are both images near Prestea — simulate a location_proximity match)
+  if (evidence.length >= 6) {
+    const ev5 = evidence[5]!; // Atewa satellite
+    // Actually, let's create a hash_match duplicate between two items with the same checksum
+    // Since our seed generates unique checksums, we'll simulate a location_proximity match
+    await prisma.duplicateGroup.create({
+      data: {
+        evidenceIds: JSON.stringify([ev0.id, ev2.id]),
+        detectionMethod: "location_proximity",
+        confidence: 0.7,
+        metadata: JSON.stringify({ distance_m: 35, time_diff_sec: 1800, note: "Both captured near Prestea within 30 minutes" }),
+        status: "detected",
+      },
+    }).catch(() => {});
+  }
+
+  // Compute weights for all evidence
+  let weightCount = 0;
+  for (const ev of evidence) {
+    const supports = await prisma.corroboration.count({ where: { evidenceId: ev.id, type: "support" } });
+    const disputes = await prisma.corroboration.count({ where: { evidenceId: ev.id, type: "dispute" } });
+    const independent = await prisma.corroboration.count({ where: { evidenceId: ev.id, type: "support", isIndependent: true } });
+
+    const baseTrust = trustMap.get(ev.uploadedById ?? "") ?? 30;
+
+    // Simple weight computation (mirrors the service)
+    const supportBonus = Math.min(supports * 0.05, 0.3);
+    const disputePenalty = Math.min(disputes * 0.08, 0.4);
+    const independentBonus = Math.min(independent * 0.1, 0.3);
+    const verificationBonus = ev.verified ? 0.15 : 0;
+    const weight = Math.max(0, Math.min(1, baseTrust / 100 + supportBonus - disputePenalty + independentBonus + verificationBonus));
+    const confidence = Math.max(0, Math.min(1, baseTrust / 100 * 0.4 + independentBonus + supportBonus * 0.5));
+    const tier = weight >= 0.85 ? "confirmed" : weight >= 0.7 ? "strong" : weight >= 0.5 ? "moderate" : weight >= 0.3 ? "weak" : "unverified";
+
+    await prisma.evidenceWeight.create({
+      data: {
+        evidenceId: ev.id,
+        weight,
+        confidence,
+        factors: JSON.stringify({ baseTrust: baseTrust / 100, supportBonus, disputePenalty, independentBonus, duplicatePenalty: 0, verificationBonus }),
+        supportCount: supports,
+        disputeCount: disputes,
+        independentCount: independent,
+        tier,
+        lastCalculatedAt: new Date(),
+      },
+    }).catch(() => {});
+    weightCount++;
+  }
+
+  const corrobCount = await prisma.corroboration.count();
+  const dupCount = await prisma.duplicateGroup.count();
+  console.log(`[seed] Seeded ${corrobCount} corroboration records, ${dupCount} duplicate groups, ${weightCount} evidence weights.`);
 }
 
 // ---------------------------------------------------------------------------

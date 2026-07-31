@@ -768,6 +768,8 @@ model Evidence {
   updatedAt       DateTime @updatedAt
 
   versions        EvidenceVersion[]
+  weight          EvidenceWeight?
+  corroborations  Corroboration[]
 
   @@index([type])
   @@index([mediaType])
@@ -911,4 +913,61 @@ model EventShare {
 
   @@index([eventId])
   @@index([sharedById])
+}
+
+// =============================================================================
+// MILESTONE 9 — Evidence Corroboration Engine
+// =============================================================================
+
+model Corroboration {
+  id              String   @id @default(cuid())
+  evidenceId      String
+  userId          String
+  type            String
+  strength        Float    @default(0.5)
+  reason          String?
+  isIndependent   Boolean  @default(false)
+  corroboratingEvidenceId String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  evidence        Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([evidenceId, userId, type])
+  @@index([evidenceId])
+  @@index([userId])
+  @@index([type])
+}
+
+model DuplicateGroup {
+  id              String   @id @default(cuid())
+  evidenceIds     String
+  detectionMethod String
+  confidence      Float    @default(0.5)
+  metadata        String?
+  status          String   @default("detected")
+  createdAt       DateTime @default(now())
+
+  @@index([detectionMethod])
+  @@index([status])
+}
+
+model EvidenceWeight {
+  id              String   @id @default(cuid())
+  evidenceId      String   @unique
+  weight          Float    @default(0.5)
+  evidence        Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  confidence      Float    @default(0.5)
+  factors         String?
+  supportCount    Int      @default(0)
+  disputeCount    Int      @default(0)
+  independentCount Int     @default(0)
+  tier            String   @default("unverified")
+  lastCalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([weight])
+  @@index([tier])
+  @@index([confidence])
 }

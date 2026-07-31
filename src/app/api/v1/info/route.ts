@@ -92,6 +92,15 @@ export const GET = withHandler(async () => {
             { path: "/api/v1/evidence/[id]", method: "GET", auth: false, description: "Evidence detail + versions" },
             { path: "/api/v1/evidence/[id]/versions", method: "GET", auth: false, description: "Version history" },
             { path: "/api/v1/evidence/[id]/verify", method: "POST", auth: false, description: "Verify hash chain (tamper detection)" },
+            // M9 — Corroboration Engine
+            { path: "/api/v1/evidence/corroboration-summary", method: "GET", auth: false, description: "Corroboration aggregate metrics" },
+            { path: "/api/v1/evidence/[id]/corroborate", method: "POST", auth: true, permission: "identity:submit_verification", description: "Support evidence" },
+            { path: "/api/v1/evidence/[id]/corroborate", method: "DELETE", auth: true, permission: "identity:submit_verification", description: "Remove support" },
+            { path: "/api/v1/evidence/[id]/dispute", method: "POST", auth: true, permission: "identity:submit_verification", description: "Dispute evidence" },
+            { path: "/api/v1/evidence/[id]/dispute", method: "DELETE", auth: true, permission: "identity:submit_verification", description: "Remove dispute" },
+            { path: "/api/v1/evidence/[id]/confidence", method: "GET", auth: false, description: "Corroboration details + weight" },
+            { path: "/api/v1/evidence/duplicates", method: "GET", auth: false, description: "List duplicate groups" },
+            { path: "/api/v1/evidence/duplicates", method: "POST", auth: true, permission: "organizations:manage", description: "Run duplicate detection" },
             // M8 — Community Intelligence
             { path: "/api/v1/intelligence/summary", method: "GET", auth: false, description: "Intelligence aggregate metrics" },
             { path: "/api/v1/intelligence/events", method: "GET", auth: false, description: "List intelligence events" },
