@@ -37,16 +37,16 @@ export const POST = withHandler(async (req: NextRequest, ctx?: { params: Promise
   try {
     const id = await resolveId(req, ctx);
     const body = (await req.json().catch(() => null)) as
-      | { body?: string; parentId?: string; attachments?: string[] }
+      | { text?: string; parentId?: string; attachments?: string[] }
       | null;
-    if (!body?.body) {
+    if (!body?.text) {
       return err("invalid_request", "body is required", 400);
     }
     const userId = "demo-user";
     const result = await getIntelligenceService().comment({
       eventId: id,
       authorId: userId,
-      body: body.body,
+      body: body.text,
       parentId: body.parentId,
       attachments: body.attachments,
     });
