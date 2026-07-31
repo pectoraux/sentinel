@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "government", label: "Gov Operations", icon: Landmark, description: "M22 · National dashboard · Regional dashboard · District dashboard · Investigation workflow · Inspection workflow · Case management", short: "M22" },
   { id: "fraud", label: "Fraud Detection", icon: AlertTriangle, description: "M21 · Fake evidence · Collusion · Sockpuppets · Location spoofing · Deepfakes · Vote rings · Reward farming", short: "M21" },
   { id: "rewards", label: "Reward Engine", icon: Award, description: "M20 · Donation pools · NGO funding · Government grants · Transparent distribution · Contribution scoring · Hash-chained ledger", short: "M20" },
   { id: "missions", label: "Mission System", icon: Target, description: "M19 · AI creates missions when confidence is low · Nearby trusted users gather evidence · Rewards based on verification quality", short: "M19" },
@@ -37,30 +38,31 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("fraud");
+  const [active, setActive] = React.useState<string>("government");
 
   const childrenArray = React.Children.toArray(children);
-  const fraud = childrenArray[0] ?? null;
-  const rewards = childrenArray[1] ?? null;
-  const missions = childrenArray[2] ?? null;
-  const copilot = childrenArray[3] ?? null;
-  const hotspots = childrenArray[4] ?? null;
-  const predictions = childrenArray[5] ?? null;
-  const fusion = childrenArray[6] ?? null;
-  const observations = childrenArray[7] ?? null;
-  const cv = childrenArray[8] ?? null;
-  const satellite = childrenArray[9] ?? null;
-  const notifications = childrenArray[10] ?? null;
-  const trust = childrenArray[11] ?? null;
-  const corroboration = childrenArray[12] ?? null;
-  const intel = childrenArray[13] ?? null;
-  const evidence = childrenArray[14] ?? null;
-  const kg = childrenArray[15] ?? null;
-  const temporal = childrenArray[16] ?? null;
-  const twin = childrenArray[17] ?? null;
-  const geo = childrenArray[18] ?? null;
-  const identity = childrenArray[19] ?? null;
-  const foundation = childrenArray[20] ?? null;
+  const government = childrenArray[0] ?? null;
+  const fraud = childrenArray[1] ?? null;
+  const rewards = childrenArray[2] ?? null;
+  const missions = childrenArray[3] ?? null;
+  const copilot = childrenArray[4] ?? null;
+  const hotspots = childrenArray[5] ?? null;
+  const predictions = childrenArray[6] ?? null;
+  const fusion = childrenArray[7] ?? null;
+  const observations = childrenArray[8] ?? null;
+  const cv = childrenArray[9] ?? null;
+  const satellite = childrenArray[10] ?? null;
+  const notifications = childrenArray[11] ?? null;
+  const trust = childrenArray[12] ?? null;
+  const corroboration = childrenArray[13] ?? null;
+  const intel = childrenArray[14] ?? null;
+  const evidence = childrenArray[15] ?? null;
+  const kg = childrenArray[16] ?? null;
+  const temporal = childrenArray[17] ?? null;
+  const twin = childrenArray[18] ?? null;
+  const geo = childrenArray[19] ?? null;
+  const identity = childrenArray[20] ?? null;
+  const foundation = childrenArray[21] ?? null;
 
   return (
     <div>
@@ -97,6 +99,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "government" && government}
         {active === "fraud" && fraud}
         {active === "rewards" && rewards}
         {active === "missions" && missions}

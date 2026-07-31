@@ -2188,3 +2188,285 @@ model UserRiskProfile {
   @@index([riskScore])
   @@index([riskLevel])
 }
+
+// =============================================================================
+// MILESTONE 22 — Government Operations Center
+// =============================================================================
+// Three-tier government dashboard (National → Regional → District) with
+// investigation workflow, inspection workflow, and case management.
+//
+// Investigations: formal inquiries into illegal mining/environmental crime,
+//   triggered by intelligence events, fraud alerts, or citizen reports.
+//   Multi-step workflow: opened → investigating → findings → recommended_action → closed.
+// Inspections: field visits to verify reported incidents, with findings,
+//   photos, GPS, and compliance assessment.
+// Cases: legal/administrative cases that aggregate investigations + inspections +
+//   evidence into a single trackable unit with status, priority, and resolution.
+// =============================================================================
+
+model Investigation {
+  id              String   @id @default(cuid())
+  key             String   @unique // e.g. "inv-prestea-galamsey-001"
+  title           String
+  description     String
+  // type: illegal_mining | water_pollution | deforestation | land_degradation | mercury_use | child_labor | tax_evasion | other
+  type            String
+  // status: open | investigating | pending_review | recommended_action | closed | escalated
+  status          String   @default("open")
+  // priority: low | medium | high | urgent
+  priority        String   @default("medium")
+  // trigger: what caused this investigation
+  triggerType     String   // intelligence_event | fraud_alert | citizen_report | satellite_change | cv_detection | mission_result | manual
+  triggerId       String?
+  triggerDescription String?
+  // location
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  region          String?  // e.g. "Western"
+  district        String?  // e.g. "Prestea-Huni Valley"
+  // jurisdiction
+  level           String   @default("regional") // national | regional | district
+  agencyId        String?  // lead agency (Organization ID)
+  agencyName      String?
+  // assignment
+  leadInvestigatorId String?
+  leadInvestigatorName String?
+  assignedAt      DateTime?
+  // linked entities
+  intelligenceEventId String?
+  twinEntityId    String?
+  fraudAlertId    String?
+  // outcome
+  findings        String?  // JSON — structured findings
+  recommendedAction String? // warning | fine | shutdown | prosecution | referral
+  estimatedImpactGHS Float @default(0)
+  // resolution
+  closedAt        DateTime?
+  closedById      String?
+  resolution      String?  // dismissed | warning_issued | fine_imposed | shutdown_ordered | prosecuted | referred
+  resolutionNotes String?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  steps           InvestigationStep[]
+  inspections     Inspection[]
+  cases           CaseInvestigation[]
+
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([level])
+  @@index([region])
+  @@index([district])
+  @@index([agencyId])
+  @@index([leadInvestigatorId])
+  @@index([createdAt])
+}
+
+model InvestigationStep {
+  id              String   @id @default(cuid())
+  investigationId String
+  // stepType: opened | evidence_collected | witness_interviewed | site_visited | lab_analysis | report_filed | reviewed | escalated | closed
+  stepType        String
+  title           String
+  description     String?
+  // actor
+  performedById   String?
+  performedByName String?
+  // evidence: JSON array of evidence IDs, photos, documents
+  evidence        String?  // JSON
+  // outcome
+  outcome         String?
+  // timing
+  performedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  investigation   Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([stepType])
+  @@index([performedAt])
+}
+
+model Inspection {
+  id              String   @id @default(cuid())
+  key             String   @unique // e.g. "insp-prestea-2024-001"
+  title           String
+  description     String?
+  // type: routine | complaint_based | follow_up | emergency | compliance_check
+  type            String   @default("complaint_based")
+  // status: scheduled | in_progress | completed | cancelled | failed
+  status          String   @default("scheduled")
+  // linked investigation (optional)
+  investigationId String?
+  // target
+  targetName      String   // e.g. "Prestea Galamsey Site A"
+  targetType      String?  // mining_site | river | forest | facility | community
+  twinEntityId    String?
+  // location
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  region          String?
+  district        String?
+  // scheduling
+  scheduledAt     DateTime?
+  conductedAt     DateTime?
+  completedAt     DateTime?
+  // inspector
+  inspectorId     String?
+  inspectorName   String?
+  agencyId        String?
+  agencyName      String?
+  // compliance assessment
+  complianceLevel String?  // compliant | minor_violations | major_violations | critical_violations
+  violationCount  Int      @default(0)
+  // outcome
+  overallResult   String?  // pass | warning | violation_notice | shutdown | prosecution_recommended
+  followUpRequired Boolean @default(false)
+  followUpDate    DateTime?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  investigation   Investigation? @relation(fields: [investigationId], references: [id], onDelete: SetNull)
+  findings        InspectionFinding[]
+
+  @@index([status])
+  @@index([type])
+  @@index([region])
+  @@index([district])
+  @@index([inspectorId])
+  @@index([agencyId])
+  @@index([scheduledAt])
+  @@index([complianceLevel])
+}
+
+model InspectionFinding {
+  id              String   @id @default(cuid())
+  inspectionId    String
+  // findingType: excavation | water_pollution | deforestation | mercury_use | equipment | worker_safety | documentation | other
+  findingType     String
+  severity        String   @default("medium") // low | medium | high | critical
+  description     String
+  // evidence
+  evidenceIds     String?  // JSON array of Evidence IDs
+  photoUrls       String?  // JSON array
+  // location of the specific finding (may differ from inspection location)
+  lat             Float?
+  lng             Float?
+  // violation details
+  violation       String?  // specific law/regulation violated
+  penalty         String?  // suggested penalty
+  // resolution
+  resolved        Boolean  @default(false)
+  resolvedAt      DateTime?
+  resolutionNotes String?
+  createdAt       DateTime @default(now())
+
+  inspection      Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+  @@index([findingType])
+  @@index([severity])
+  @@index([resolved])
+}
+
+model Case {
+  id              String   @id @default(cuid())
+  key             String   @unique // e.g. "case-gha-2024-001"
+  caseNumber      String   @unique // official case number, e.g. "EPA/2024/0142"
+  title           String
+  description     String
+  // type: illegal_mining | water_pollution | deforestation | mercury_contamination | tax_evasion | other
+  type            String
+  // status: filed | under_review | active | pending_hearing | adjudicated | closed | appealed
+  status          String   @default("filed")
+  // priority: low | medium | high | urgent
+  priority        String   @default("medium")
+  // jurisdiction
+  level           String   @default("regional") // national | regional | district
+  region          String?
+  district        String?
+  // parties
+  leadAgencyId    String?
+  leadAgencyName  String?
+  prosecutingAgencyId String?
+  prosecutingAgencyName String?
+  defendantName   String?
+  defendantType   String?  // individual | company | cooperative | unknown
+  // location
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  // linked entities
+  intelligenceEventId String?
+  twinEntityId    String?
+  // financial
+  estimatedDamagesGHS Float @default(0)
+  finesImposedGHS Float   @default(0)
+  // resolution
+  filedAt         DateTime @default(now())
+  closedAt        DateTime?
+  resolution      String?  // dismissed | settled | fined | shutdown | convicted | acquitted | referred
+  resolutionNotes String?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  investigations  CaseInvestigation[]
+  events          CaseEvent[]
+
+  @@index([status])
+  @@index([type])
+  @@index([priority])
+  @@index([level])
+  @@index([region])
+  @@index([district])
+  @@index([leadAgencyId])
+  @@index([filedAt])
+}
+
+model CaseInvestigation {
+  id              String   @id @default(cuid())
+  caseId          String
+  investigationId String
+  linkedAt        DateTime @default(now())
+  linkedById      String?
+  notes           String?
+
+  case             Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  investigation    Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, investigationId])
+  @@index([caseId])
+  @@index([investigationId])
+}
+
+model CaseEvent {
+  id              String   @id @default(cuid())
+  caseId          String
+  // eventType: filed | assigned | hearing_scheduled | evidence_submitted | witness_added | motion_filed | ruling | adjourned | settled | closed | appealed
+  eventType       String
+  title           String
+  description     String?
+  // actor
+  performedById   String?
+  performedByName String?
+  // event data
+  eventData       String?  // JSON — hearing date, motion details, ruling text, etc.
+  // timing
+  eventDate       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  case            Case @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([eventType])
+  @@index([eventDate])
+}

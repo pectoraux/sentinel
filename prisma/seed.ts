@@ -172,6 +172,9 @@ async function main() {
 
   console.log("[seed] Seeding M21 fraud detection data...");
   await seedFraudData().catch((e) => console.log("[seed] M21 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding M22 government operations center data...");
+  await seedGovernmentData().catch((e) => console.log("[seed] M22 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -2660,6 +2663,577 @@ async function seedFraudData() {
   }
 
   console.log(`[seed] Seeded ${alertCount} fraud alerts, ${signalCount} signals, ${investigationCount} investigations, ${profileCount} user risk profiles.`);
+}
+
+// ---------------------------------------------------------------------------
+// M22 — Government Operations Center seed data
+// ---------------------------------------------------------------------------
+// Creates investigations, inspections, cases with realistic workflow steps,
+// findings, and events. References real intelligence events, twin entities,
+// and fraud alerts from the platform.
+// ---------------------------------------------------------------------------
+
+async function seedGovernmentData() {
+  // Check if government data already exists
+  const existing = await prisma.investigation.count();
+  if (existing > 0) {
+    console.log(`[seed] Government data already exists (${existing} investigations) — skipping.`);
+    return;
+  }
+
+  // Get real users and orgs to reference
+  const users = await prisma.user.findMany({ select: { id: true, name: true, email: true }, take: 10 });
+  const orgs = await prisma.organization.findMany({ select: { id: true, key: true, name: true, type: true, region: true }, take: 10 });
+  const intelEvents = await prisma.intelligenceEvent.findMany({ select: { id: true, key: true, title: true, type: true, severity: true, lat: true, lng: true, locationName: true }, take: 10 });
+  const twinEntities = await prisma.twinEntity.findMany({ select: { id: true, key: true, name: true, type: true, lat: true, lng: true }, take: 10 });
+  const fraudAlerts = await prisma.fraudAlert.findMany({ select: { id: true, key: true, type: true, title: true, targetUserId: true }, take: 10 });
+
+  if (users.length < 2 || orgs.length < 1) {
+    console.log("[seed] Not enough users/orgs for government seed — skipping.");
+    return;
+  }
+
+  const admin = users[0]!;
+  const inspector = users.find((u) => u.email?.includes("inspector")) ?? users[1]!;
+  const moderator = users.find((u) => u.email?.includes("moderator")) ?? users[2]!;
+
+  const epa = orgs.find((o) => o.key === "epa-ghana") ?? orgs[0]!;
+  const minerals = orgs.find((o) => o.key === "minerals-commission-gh") ?? orgs[1]!;
+
+  const now = new Date();
+  const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  // Helper to find an intel event by type
+  const findEvent = (type: string) => intelEvents.find((e) => e.type === type) ?? intelEvents[0];
+  const findTwin = (type: string) => twinEntities.find((e) => e.type === type) ?? twinEntities[0];
+
+  // ===========================================================================
+  // INVESTIGATIONS — 5 across different regions, types, statuses
+  // ===========================================================================
+  const investigationsData = [
+    {
+      key: "inv-prestea-galamsey-001",
+      title: "Prestea Galamsey Complex Investigation",
+      description: "Large-scale illegal mining operation at Prestea Galamsey Site A. Multiple excavators, mercury processing, and water diversion detected via satellite imagery and citizen reports.",
+      type: "illegal_mining",
+      priority: "urgent",
+      triggerType: "satellite_change",
+      triggerDescription: "Sentinel-2 imagery detected 12.4 hectares of new excavation between 2024-06-01 and 2024-07-15.",
+      lat: 5.4321, lng: -2.1456,
+      locationName: "Prestea Galamsey Site A",
+      region: "Western", district: "Prestea-Huni Valley",
+      level: "regional",
+      agencyId: epa.id, agencyName: epa.name,
+      leadInvestigatorId: inspector.id, leadInvestigatorName: inspector.name,
+      intelligenceEventId: findEvent("illegal_mining")?.id,
+      twinEntityId: findTwin("mine")?.id,
+      estimatedImpactGHS: 450000,
+      status: "investigating",
+      steps: [
+        { stepType: "opened", title: "Investigation Opened", description: "Formal investigation opened following satellite change detection.", outcome: "Case file created", daysAgo: 14 },
+        { stepType: "site_visited", title: "Site Visit Conducted", description: "EPA inspectors visited the site on 2024-07-20. Observed 3 active excavators, mercury processing pool, and diverted stream.", outcome: "3 violations documented", daysAgo: 10 },
+        { stepType: "evidence_collected", title: "Evidence Collected", description: "Water samples, soil samples, drone photos, and GPS tracks collected.", outcome: "12 evidence items catalogued", daysAgo: 8 },
+        { stepType: "witness_interviewed", title: "Witness Interviewed", description: "Local farmer Kwame T. interviewed — reported 6 months of activity, ~20 workers, nighttime operations.", outcome: "Statement recorded", daysAgo: 5 },
+        { stepType: "lab_analysis", title: "Lab Analysis Ordered", description: "Water and soil samples sent to Ghana EPA lab for mercury and heavy metal analysis.", outcome: "Results pending", daysAgo: 3 },
+      ],
+    },
+    {
+      key: "inv-obuasi-mercury-002",
+      title: "Obuasi Mercury Contamination Investigation",
+      description: "Mercury contamination of the Oda River traced to illegal processing site at Obuasi Illegal Pit. Downstream communities at risk.",
+      type: "mercury_use",
+      priority: "high",
+      triggerType: "citizen_report",
+      triggerDescription: "WACAM field agent reported mercury smell and turbid water at Oda River crossing near Obuasi.",
+      lat: 6.2062, lng: -1.6678,
+      locationName: "Obuasi Illegal Pit",
+      region: "Ashanti", district: "Obuasi Municipal",
+      level: "regional",
+      agencyId: minerals.id, agencyName: minerals.name,
+      leadInvestigatorId: inspector.id, leadInvestigatorName: inspector.name,
+      intelligenceEventId: findEvent("water_contamination")?.id,
+      twinEntityId: findTwin("river")?.id,
+      estimatedImpactGHS: 180000,
+      status: "pending_review",
+      steps: [
+        { stepType: "opened", title: "Investigation Opened", description: "Opened following citizen complaint via WACAM.", outcome: "Case file created", daysAgo: 21 },
+        { stepType: "site_visited", title: "Site Visit Conducted", description: "Minerals Commission inspector visited. Confirmed mercury processing with retorts.", outcome: "2 violations documented", daysAgo: 18 },
+        { stepType: "evidence_collected", title: "Evidence Collected", description: "Water samples (4), soil samples (3), mercury residue photos.", outcome: "7 evidence items", daysAgo: 15 },
+        { stepType: "lab_analysis", title: "Lab Analysis Complete", description: "Mercury levels: 4.2 µg/L (WHO limit: 1.0 µg/L). Lead: 0.8 mg/L.", outcome: "4× WHO mercury limit confirmed", daysAgo: 7 },
+        { stepType: "report_filed", title: "Investigation Report Filed", description: "Full report filed with Minerals Commission regional office.", outcome: "Pending supervisor review", daysAgo: 3 },
+      ],
+    },
+    {
+      key: "inv-kibi-deforestation-003",
+      title: "Atewa Forest Encroachment Investigation",
+      description: "Illegal mining encroachment into Atewa Forest Reserve. Satellite imagery shows 8.7 hectares of forest loss within protected boundary.",
+      type: "deforestation",
+      priority: "urgent",
+      triggerType: "cv_detection",
+      triggerDescription: "Computer Vision detected forest_loss with 91% confidence in Atewa Forest Reserve sector 3.",
+      lat: 6.1667, lng: -0.5500,
+      locationName: "Atewa Forest Reserve — Sector 3",
+      region: "Eastern", district: "Kwaebibirem",
+      level: "national",
+      agencyId: epa.id, agencyName: epa.name,
+      leadInvestigatorId: admin.id, leadInvestigatorName: admin.name,
+      intelligenceEventId: findEvent("deforestation")?.id,
+      twinEntityId: findTwin("forest")?.id,
+      estimatedImpactGHS: 820000,
+      status: "escalated",
+      steps: [
+        { stepType: "opened", title: "Investigation Opened", description: "Escalated to national level due to protected forest status.", outcome: "National case file", daysAgo: 18 },
+        { stepType: "site_visited", title: "Site Visit Conducted", description: "Joint EPA + Forestry Commission visit. Confirmed 8.7 ha clearing, 2 active pits.", outcome: "Critical violations", daysAgo: 14 },
+        { stepType: "evidence_collected", title: "Evidence Collected", description: "Drone survey, GPS boundary mapping, before/after satellite comparison.", outcome: "15 evidence items", daysAgo: 10 },
+        { stepType: "escalated", title: "Escalated to National", description: "Escalated to EPA Director-General and Ministry of Lands.", outcome: "Ministerial briefing scheduled", daysAgo: 5 },
+      ],
+    },
+    {
+      key: "inv-dunkwa-water-004",
+      title: "Dunkwa Alluvial Mining Water Pollution",
+      description: "Offin River turbidity increased 340% downstream of Dunkwa Mining Complex. Alluvial mining operations discharging sediment directly into river.",
+      type: "water_pollution",
+      priority: "high",
+      triggerType: "intelligence_event",
+      triggerDescription: "Community intelligence event reported fish kills and brown water at Offin River bend.",
+      lat: 5.9783, lng: -1.7822,
+      locationName: "Dunkwa Mining Complex",
+      region: "Central", district: "Upper Denkyira East",
+      level: "regional",
+      agencyId: epa.id, agencyName: epa.name,
+      leadInvestigatorId: inspector.id, leadInvestigatorName: inspector.name,
+      intelligenceEventId: findEvent("water_contamination")?.id,
+      twinEntityId: findTwin("river")?.id,
+      estimatedImpactGHS: 220000,
+      status: "investigating",
+      steps: [
+        { stepType: "opened", title: "Investigation Opened", description: "Opened following community intelligence event.", outcome: "Case file created", daysAgo: 9 },
+        { stepType: "site_visited", title: "Site Visit Conducted", description: "EPA inspector visited. Confirmed sediment discharge, 3 unlicensed operations.", outcome: "3 violations", daysAgo: 6 },
+        { stepType: "evidence_collected", title: "Evidence Collected", description: "Water samples upstream/downstream, turbidity measurements, photos.", outcome: "9 evidence items", daysAgo: 4 },
+      ],
+    },
+    {
+      key: "inv-tarkwa-equipment-005",
+      title: "Tarkwa Nsuaem Unlicensed Equipment Seizure",
+      description: "Investigation into unlicensed mining equipment (2 excavators, 1 washing plant) at Tarkwa Nsuaem cluster. Operator lacks mining license.",
+      type: "illegal_mining",
+      priority: "medium",
+      triggerType: "mission_result",
+      triggerDescription: "M19 mission verified unlicensed equipment operation with excellent quality evidence.",
+      lat: 5.3056, lng: -1.9933,
+      locationName: "Tarkwa Nsuaem Cluster",
+      region: "Western", district: "Tarkwa-Nsuaem",
+      level: "district",
+      agencyId: minerals.id, agencyName: minerals.name,
+      leadInvestigatorId: inspector.id, leadInvestigatorName: inspector.name,
+      intelligenceEventId: findEvent("illegal_mining")?.id,
+      twinEntityId: findTwin("mine")?.id,
+      estimatedImpactGHS: 75000,
+      status: "closed",
+      steps: [
+        { stepType: "opened", title: "Investigation Opened", description: "Opened following mission evidence submission.", outcome: "Case file created", daysAgo: 30 },
+        { stepType: "site_visited", title: "Site Visit Conducted", description: "Minerals Commission inspector confirmed unlicensed equipment.", outcome: "2 excavators, 1 washing plant", daysAgo: 25 },
+        { stepType: "evidence_collected", title: "Evidence Collected", description: "Equipment photos, serial numbers, operator interview.", outcome: "6 evidence items", daysAgo: 22 },
+        { stepType: "reviewed", title: "Review Complete", description: "Legal review confirmed violation of Minerals and Mining Act.", outcome: "Equipment seizure recommended", daysAgo: 15 },
+        { stepType: "closed", title: "Case Closed", description: "Equipment seized, operator fined ₵45,000.", outcome: "Resolved — fine imposed", daysAgo: 8 },
+      ],
+      resolution: "fine_imposed",
+      resolutionNotes: "Equipment seized by Minerals Commission. Operator fined ₵45,000 and issued warning. Case closed.",
+    },
+  ];
+
+  let invCount = 0;
+  let stepCount = 0;
+  const createdInvestigations: string[] = [];
+
+  for (const inv of investigationsData) {
+    const steps = inv.steps;
+    const { steps: _steps, resolution, resolutionNotes, ...invData } = inv;
+    const created = await prisma.investigation.create({
+      data: {
+        ...invData,
+        assignedAt: invData.leadInvestigatorId ? daysAgo(20) : null,
+        findings: null,
+        recommendedAction: invData.status === "pending_review" ? "fine" : invData.status === "escalated" ? "prosecution" : invData.status === "closed" ? "fine" : null,
+        closedAt: invData.status === "closed" ? daysAgo(8) : null,
+        closedById: invData.status === "closed" ? admin.id : null,
+        resolution: resolution ?? null,
+        resolutionNotes: resolutionNotes ?? null,
+        metadata: JSON.stringify({ seed: true }),
+      },
+    });
+    invCount++;
+    createdInvestigations.push(created.id);
+
+    for (const s of steps) {
+      await prisma.investigationStep.create({
+        data: {
+          investigationId: created.id,
+          stepType: s.stepType,
+          title: s.title,
+          description: s.description,
+          performedById: invData.leadInvestigatorId,
+          performedByName: invData.leadInvestigatorName,
+          outcome: s.outcome,
+          performedAt: daysAgo(s.daysAgo),
+        },
+      });
+      stepCount++;
+    }
+  }
+
+  // ===========================================================================
+  // INSPECTIONS — 6 with findings
+  // ===========================================================================
+  const inspectionsData = [
+    {
+      key: "insp-prestea-2024-001",
+      title: "Prestea Site A Field Inspection",
+      description: "Field inspection of Prestea Galamsey Site A following satellite change detection.",
+      type: "complaint_based",
+      status: "completed",
+      investigationId: createdInvestigations[0],
+      targetName: "Prestea Galamsey Site A",
+      targetType: "mining_site",
+      twinEntityId: findTwin("mine")?.id,
+      lat: 5.4321, lng: -2.1456,
+      locationName: "Prestea Galamsey Site A",
+      region: "Western", district: "Prestea-Huni Valley",
+      scheduledAt: daysAgo(11), conductedAt: daysAgo(10), completedAt: daysAgo(10),
+      inspectorId: inspector.id, inspectorName: inspector.name,
+      agencyId: epa.id, agencyName: epa.name,
+      complianceLevel: "critical_violations",
+      violationCount: 4,
+      overallResult: "shutdown",
+      followUpRequired: true,
+      followUpDate: daysAgo(-7),
+      findings: [
+        { findingType: "excavation", severity: "critical", description: "3 unlicensed excavators operating within 50m of Pra River tributary.", violation: "Minerals and Mining Act §70", penalty: "Equipment seizure" },
+        { findingType: "mercury_use", severity: "critical", description: "Mercury processing pool with visible mercury droplets. No retort or containment.", violation: "Mercury Act §5", penalty: "Immediate shutdown" },
+        { findingType: "water_pollution", severity: "high", description: "Sediment-laden discharge directly into stream. Turbidity 480 NTU (limit: 50 NTU).", violation: "EPA Act §12", penalty: "₵80,000 fine" },
+        { findingType: "worker_safety", severity: "medium", description: "Workers without PPE. No safety signage. Open pit without barriers.", violation: "Factories Act §15", penalty: "₵15,000 fine" },
+      ],
+    },
+    {
+      key: "insp-obuasi-2024-002",
+      title: "Obuasi Mercury Processing Inspection",
+      description: "Inspection of mercury processing site at Obuasi Illegal Pit.",
+      type: "complaint_based",
+      status: "completed",
+      investigationId: createdInvestigations[1],
+      targetName: "Obuasi Illegal Pit",
+      targetType: "mining_site",
+      twinEntityId: findTwin("mine")?.id,
+      lat: 6.2062, lng: -1.6678,
+      locationName: "Obuasi Illegal Pit",
+      region: "Ashanti", district: "Obuasi Municipal",
+      scheduledAt: daysAgo(19), conductedAt: daysAgo(18), completedAt: daysAgo(18),
+      inspectorId: inspector.id, inspectorName: inspector.name,
+      agencyId: minerals.id, agencyName: minerals.name,
+      complianceLevel: "major_violations",
+      violationCount: 2,
+      overallResult: "violation_notice",
+      followUpRequired: true,
+      followUpDate: daysAgo(-14),
+      findings: [
+        { findingType: "mercury_use", severity: "critical", description: "Mercury retorts in operation. Mercury visible in processing trays.", violation: "Mercury Act §5", penalty: "Shutdown + ₵50,000 fine" },
+        { findingType: "water_pollution", severity: "high", description: "Mercury-contaminated runoff entering Oda River. Lab: 4.2 µg/L Hg.", violation: "EPA Act §12", penalty: "₵30,000 fine" },
+      ],
+    },
+    {
+      key: "insp-atewa-2024-003",
+      title: "Atewa Forest Reserve Sector 3 Inspection",
+      description: "Joint EPA + Forestry Commission inspection of forest encroachment.",
+      type: "emergency",
+      status: "completed",
+      investigationId: createdInvestigations[2],
+      targetName: "Atewa Forest Reserve — Sector 3",
+      targetType: "forest",
+      twinEntityId: findTwin("forest")?.id,
+      lat: 6.1667, lng: -0.5500,
+      locationName: "Atewa Forest Reserve — Sector 3",
+      region: "Eastern", district: "Kwaebibirem",
+      scheduledAt: daysAgo(15), conductedAt: daysAgo(14), completedAt: daysAgo(14),
+      inspectorId: admin.id, inspectorName: admin.name,
+      agencyId: epa.id, agencyName: epa.name,
+      complianceLevel: "critical_violations",
+      violationCount: 3,
+      overallResult: "prosecution_recommended",
+      followUpRequired: true,
+      followUpDate: daysAgo(-30),
+      findings: [
+        { findingType: "deforestation", severity: "critical", description: "8.7 hectares of protected forest cleared. Protected species (Mahogany, Odum) felled.", violation: "Forest Protection Act §8", penalty: "Prosecution" },
+        { findingType: "excavation", severity: "high", description: "2 active mining pits within forest reserve boundary.", violation: "Minerals Act §70", penalty: "Shutdown + fine" },
+        { findingType: "mercury_use", severity: "high", description: "Mercury processing detected within 200m of forest stream.", violation: "Mercury Act §5", penalty: "Prosecution" },
+      ],
+    },
+    {
+      key: "insp-dunkwa-2024-004",
+      title: "Dunkwa Alluvial Site Compliance Check",
+      description: "Compliance inspection of Dunkwa Mining Complex alluvial operations.",
+      type: "compliance_check",
+      status: "completed",
+      investigationId: createdInvestigations[3],
+      targetName: "Dunkwa Mining Complex",
+      targetType: "mining_site",
+      twinEntityId: findTwin("mine")?.id,
+      lat: 5.9783, lng: -1.7822,
+      locationName: "Dunkwa Mining Complex",
+      region: "Central", district: "Upper Denkyira East",
+      scheduledAt: daysAgo(7), conductedAt: daysAgo(6), completedAt: daysAgo(6),
+      inspectorId: inspector.id, inspectorName: inspector.name,
+      agencyId: epa.id, agencyName: epa.name,
+      complianceLevel: "major_violations",
+      violationCount: 3,
+      overallResult: "violation_notice",
+      followUpRequired: true,
+      followUpDate: daysAgo(-21),
+      findings: [
+        { findingType: "water_pollution", severity: "high", description: "Sediment discharge into Offin River. Turbidity 340% above baseline.", violation: "EPA Act §12", penalty: "₵40,000 fine" },
+        { findingType: "documentation", severity: "medium", description: "2 of 3 operators lack valid mining licenses.", violation: "Minerals Act §40", penalty: "License revocation" },
+        { findingType: "excavation", severity: "medium", description: "Excavation outside licensed boundary by 80m.", violation: "Minerals Act §42", penalty: "₵15,000 fine" },
+      ],
+    },
+    {
+      key: "insp-tarkwa-2024-005",
+      title: "Tarkwa Nsuaem Equipment Verification",
+      description: "Verification of equipment licenses at Tarkwa Nsuaem cluster.",
+      type: "compliance_check",
+      status: "completed",
+      investigationId: createdInvestigations[4],
+      targetName: "Tarkwa Nsuaem Cluster",
+      targetType: "mining_site",
+      twinEntityId: findTwin("mine")?.id,
+      lat: 5.3056, lng: -1.9933,
+      locationName: "Tarkwa Nsuaem Cluster",
+      region: "Western", district: "Tarkwa-Nsuaem",
+      scheduledAt: daysAgo(26), conductedAt: daysAgo(25), completedAt: daysAgo(25),
+      inspectorId: inspector.id, inspectorName: inspector.name,
+      agencyId: minerals.id, agencyName: minerals.name,
+      complianceLevel: "major_violations",
+      violationCount: 2,
+      overallResult: "violation_notice",
+      followUpRequired: false,
+      findings: [
+        { findingType: "equipment", severity: "high", description: "2 excavators (CAT 320, CAT 330) without equipment registration.", violation: "Minerals Act §55", penalty: "Equipment seizure" },
+        { findingType: "documentation", severity: "medium", description: "No mining license on file for operator.", violation: "Minerals Act §40", penalty: "₵45,000 fine" },
+      ],
+    },
+    {
+      key: "insp-bibiani-2024-006",
+      title: "Bibiani North Routine Inspection",
+      description: "Routine quarterly inspection of Bibiani North mining site.",
+      type: "routine",
+      status: "scheduled",
+      investigationId: null,
+      targetName: "Bibiani North Site",
+      targetType: "mining_site",
+      twinEntityId: findTwin("mine")?.id,
+      lat: 6.4639, lng: -2.3322,
+      locationName: "Bibiani North Site",
+      region: "Western North", district: "Bibiani-Anhwiaso-Bekwai",
+      scheduledAt: daysAgo(-3), conductedAt: null, completedAt: null,
+      inspectorId: inspector.id, inspectorName: inspector.name,
+      agencyId: epa.id, agencyName: epa.name,
+      complianceLevel: null,
+      violationCount: 0,
+      overallResult: null,
+      followUpRequired: false,
+      findings: [],
+    },
+  ];
+
+  let inspCount = 0;
+  let findingCount = 0;
+
+  for (const insp of inspectionsData) {
+    const { findings, ...inspData } = insp;
+    const created = await prisma.inspection.create({
+      data: {
+        ...inspData,
+        metadata: JSON.stringify({ seed: true }),
+      },
+    });
+    inspCount++;
+
+    for (const f of findings) {
+      await prisma.inspectionFinding.create({
+        data: {
+          inspectionId: created.id,
+          findingType: f.findingType,
+          severity: f.severity,
+          description: f.description,
+          violation: f.violation,
+          penalty: f.penalty,
+          resolved: inspData.status === "completed" && f.severity !== "critical",
+        },
+      });
+      findingCount++;
+    }
+  }
+
+  // ===========================================================================
+  // CASES — 4 with linked investigations and events
+  // ===========================================================================
+  const casesData = [
+    {
+      key: "case-gha-2024-001",
+      caseNumber: "EPA/2024/0142",
+      title: "Republic v. Prestea Galamsey Syndicate",
+      description: "Criminal case against Prestea galamsey operators for illegal mining, mercury use, and water pollution. 4 defendants.",
+      type: "illegal_mining",
+      priority: "urgent",
+      level: "regional",
+      region: "Western", district: "Prestea-Huni Valley",
+      leadAgencyId: epa.id, leadAgencyName: epa.name,
+      prosecutingAgencyId: epa.id, prosecutingAgencyName: "EPA Legal Division",
+      defendantName: "Prestea Galamsey Syndicate (4 individuals)",
+      defendantType: "cooperative",
+      lat: 5.4321, lng: -2.1456,
+      locationName: "Prestea Galamsey Site A",
+      intelligenceEventId: findEvent("illegal_mining")?.id,
+      twinEntityId: findTwin("mine")?.id,
+      estimatedDamagesGHS: 450000,
+      finesImposedGHS: 0,
+      status: "active",
+      investigationIds: [createdInvestigations[0]!],
+      events: [
+        { eventType: "filed", title: "Case Filed", description: "Case filed at Sekondi High Court.", daysAgo: 12 },
+        { eventType: "assigned", title: "Judge Assigned", description: "Justice K. Mensah assigned to case.", daysAgo: 10 },
+        { eventType: "evidence_submitted", title: "Evidence Bundle Submitted", description: "12 evidence items, lab results, and inspection report submitted.", daysAgo: 7 },
+        { eventType: "hearing_scheduled", title: "Hearing Scheduled", description: "First hearing scheduled for 2024-08-15.", daysAgo: 5 },
+      ],
+    },
+    {
+      key: "case-gha-2024-002",
+      caseNumber: "EPA/2024/0138",
+      title: "Republic v. Obuasi Mercury Operators",
+      description: "Case against Obuasi mercury processors. Mercury levels 4× WHO limit in Oda River.",
+      type: "mercury_contamination",
+      priority: "high",
+      level: "regional",
+      region: "Ashanti", district: "Obuasi Municipal",
+      leadAgencyId: minerals.id, leadAgencyName: minerals.name,
+      prosecutingAgencyId: minerals.id, prosecutingAgencyName: "Minerals Commission Legal",
+      defendantName: "Obuasi Mercury Operators (2 individuals)",
+      defendantType: "individual",
+      lat: 6.2062, lng: -1.6678,
+      locationName: "Obuasi Illegal Pit",
+      intelligenceEventId: findEvent("water_contamination")?.id,
+      twinEntityId: findTwin("river")?.id,
+      estimatedDamagesGHS: 180000,
+      finesImposedGHS: 0,
+      status: "pending_hearing",
+      investigationIds: [createdInvestigations[1]!],
+      events: [
+        { eventType: "filed", title: "Case Filed", description: "Case filed at Kumasi High Court.", daysAgo: 5 },
+        { eventType: "assigned", title: "Judge Assigned", description: "Justice A. Owusu assigned.", daysAgo: 3 },
+        { eventType: "hearing_scheduled", title: "Hearing Scheduled", description: "Hearing on 2024-08-20.", daysAgo: 1 },
+      ],
+    },
+    {
+      key: "case-gha-2024-003",
+      caseNumber: "EPA/2024/0151",
+      title: "Republic v. Atewa Forest Miners",
+      description: "National-level case for protected forest encroachment. Prosecution for deforestation of Atewa Forest Reserve.",
+      type: "deforestation",
+      priority: "urgent",
+      level: "national",
+      region: "Eastern", district: "Kwaebibirem",
+      leadAgencyId: epa.id, leadAgencyName: epa.name,
+      prosecutingAgencyId: "attorney-general-ghana",
+      prosecutingAgencyName: "Attorney General's Department",
+      defendantName: "Atewa Miners (unknown individuals)",
+      defendantType: "unknown",
+      lat: 6.1667, lng: -0.5500,
+      locationName: "Atewa Forest Reserve — Sector 3",
+      intelligenceEventId: findEvent("deforestation")?.id,
+      twinEntityId: findTwin("forest")?.id,
+      estimatedDamagesGHS: 820000,
+      finesImposedGHS: 0,
+      status: "under_review",
+      investigationIds: [createdInvestigations[2]!],
+      events: [
+        { eventType: "filed", title: "Case Filed", description: "Case filed at Accra High Court (national jurisdiction).", daysAgo: 4 },
+        { eventType: "assigned", title: "Review Committee Assigned", description: "National review committee assigned due to protected area status.", daysAgo: 2 },
+      ],
+    },
+    {
+      key: "case-gha-2024-004",
+      caseNumber: "MC/2024/0089",
+      title: "Minerals Commission v. Tarkwa Equipment Operator",
+      description: "Administrative case for unlicensed equipment. Equipment seized, operator fined.",
+      type: "illegal_mining",
+      priority: "medium",
+      level: "district",
+      region: "Western", district: "Tarkwa-Nsuaem",
+      leadAgencyId: minerals.id, leadAgencyName: minerals.name,
+      prosecutingAgencyId: minerals.id, prosecutingAgencyName: "Minerals Commission Legal",
+      defendantName: "Tarkwa Equipment Operator",
+      defendantType: "individual",
+      lat: 5.3056, lng: -1.9933,
+      locationName: "Tarkwa Nsuaem Cluster",
+      intelligenceEventId: findEvent("illegal_mining")?.id,
+      twinEntityId: findTwin("mine")?.id,
+      estimatedDamagesGHS: 75000,
+      finesImposedGHS: 45000,
+      status: "closed",
+      investigationIds: [createdInvestigations[4]!],
+      events: [
+        { eventType: "filed", title: "Case Filed", description: "Administrative case filed at Tarkwa District office.", daysAgo: 20 },
+        { eventType: "evidence_submitted", title: "Evidence Submitted", description: "Equipment photos, serial numbers, inspection report.", daysAgo: 18 },
+        { eventType: "ruling", title: "Ruling Issued", description: "Operator found liable. Equipment forfeited to state. Fine: ₵45,000.", daysAgo: 10 },
+        { eventType: "closed", title: "Case Closed", description: "Fine paid. Equipment seized. Case closed.", daysAgo: 8 },
+      ],
+      resolution: "fined",
+      resolutionNotes: "Equipment seized. Fine of ₵45,000 paid. Warning issued for future violations.",
+    },
+  ];
+
+  let caseCount = 0;
+  let eventCount = 0;
+
+  for (const c of casesData) {
+    const { events, investigationIds, resolution, resolutionNotes, ...caseData } = c;
+    const created = await prisma.case.create({
+      data: {
+        ...caseData,
+        closedAt: caseData.status === "closed" ? daysAgo(8) : null,
+        resolution: resolution ?? null,
+        resolutionNotes: resolutionNotes ?? null,
+        metadata: JSON.stringify({ seed: true }),
+      },
+    });
+    caseCount++;
+
+    // Link investigations
+    if (investigationIds) {
+      for (const invId of investigationIds) {
+        await prisma.caseInvestigation.create({
+          data: { caseId: created.id, investigationId: invId, linkedById: admin.id },
+        }).catch(() => {});
+      }
+    }
+
+    // Create events
+    for (const e of events) {
+      await prisma.caseEvent.create({
+        data: {
+          caseId: created.id,
+          eventType: e.eventType,
+          title: e.title,
+          description: e.description,
+          performedById: admin.id,
+          performedByName: admin.name,
+          eventDate: daysAgo(e.daysAgo),
+        },
+      });
+      eventCount++;
+    }
+  }
+
+  console.log(`[seed] Seeded ${invCount} investigations (${stepCount} steps), ${inspCount} inspections (${findingCount} findings), ${caseCount} cases (${eventCount} events).`);
 }
 
 main()
