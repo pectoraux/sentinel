@@ -2062,3 +2062,23 @@ model SimulationComparison {
 
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 24 — Analytics Platform
+// =============================================================================
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  category        String
+  period          String   @default("daily")
+  snapshotDate    DateTime
+  kpis            String
+  metricCount     Int      @default(0)
+  computedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([category, period, snapshotDate])
+  @@index([category])
+  @@index([period])
+  @@index([snapshotDate])
+  @@index([computedAt])
+}

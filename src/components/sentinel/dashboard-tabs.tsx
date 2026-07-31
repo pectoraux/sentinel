@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark, FlaskConical } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark, FlaskConical, BarChart3 } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "analytics", label: "Analytics", icon: BarChart3, description: "M24 · Hotspots · Environmental KPIs · Response times · Community engagement · Trust metrics · Reward metrics", short: "M24" },
   { id: "simulation", label: "Simulation", icon: FlaskConical, description: "M23 · What if? · Increase inspections · Protect watershed · Close roads · Deploy drones · Predict outcomes", short: "M23" },
   { id: "government", label: "Gov Operations", icon: Landmark, description: "M22 · National dashboard · Regional dashboard · District dashboard · Investigation workflow · Inspection workflow · Case management", short: "M22" },
   { id: "fraud", label: "Fraud Detection", icon: AlertTriangle, description: "M21 · Fake evidence · Collusion · Sockpuppets · Location spoofing · Deepfakes · Vote rings · Reward farming", short: "M21" },
@@ -39,32 +40,33 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("simulation");
+  const [active, setActive] = React.useState<string>("analytics");
 
   const childrenArray = React.Children.toArray(children);
-  const simulation = childrenArray[0] ?? null;
-  const government = childrenArray[1] ?? null;
-  const fraud = childrenArray[2] ?? null;
-  const rewards = childrenArray[3] ?? null;
-  const missions = childrenArray[4] ?? null;
-  const copilot = childrenArray[5] ?? null;
-  const hotspots = childrenArray[6] ?? null;
-  const predictions = childrenArray[7] ?? null;
-  const fusion = childrenArray[8] ?? null;
-  const observations = childrenArray[9] ?? null;
-  const cv = childrenArray[10] ?? null;
-  const satellite = childrenArray[11] ?? null;
-  const notifications = childrenArray[12] ?? null;
-  const trust = childrenArray[13] ?? null;
-  const corroboration = childrenArray[14] ?? null;
-  const intel = childrenArray[15] ?? null;
-  const evidence = childrenArray[16] ?? null;
-  const kg = childrenArray[17] ?? null;
-  const temporal = childrenArray[18] ?? null;
-  const twin = childrenArray[19] ?? null;
-  const geo = childrenArray[20] ?? null;
-  const identity = childrenArray[21] ?? null;
-  const foundation = childrenArray[22] ?? null;
+  const analytics = childrenArray[0] ?? null;
+  const simulation = childrenArray[1] ?? null;
+  const government = childrenArray[2] ?? null;
+  const fraud = childrenArray[3] ?? null;
+  const rewards = childrenArray[4] ?? null;
+  const missions = childrenArray[5] ?? null;
+  const copilot = childrenArray[6] ?? null;
+  const hotspots = childrenArray[7] ?? null;
+  const predictions = childrenArray[8] ?? null;
+  const fusion = childrenArray[9] ?? null;
+  const observations = childrenArray[10] ?? null;
+  const cv = childrenArray[11] ?? null;
+  const satellite = childrenArray[12] ?? null;
+  const notifications = childrenArray[13] ?? null;
+  const trust = childrenArray[14] ?? null;
+  const corroboration = childrenArray[15] ?? null;
+  const intel = childrenArray[16] ?? null;
+  const evidence = childrenArray[17] ?? null;
+  const kg = childrenArray[18] ?? null;
+  const temporal = childrenArray[19] ?? null;
+  const twin = childrenArray[20] ?? null;
+  const geo = childrenArray[21] ?? null;
+  const identity = childrenArray[22] ?? null;
+  const foundation = childrenArray[23] ?? null;
 
   return (
     <div>
@@ -101,6 +103,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "analytics" && analytics}
         {active === "simulation" && simulation}
         {active === "government" && government}
         {active === "fraud" && fraud}

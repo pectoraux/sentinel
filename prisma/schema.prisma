@@ -2569,3 +2569,41 @@ model SimulationComparison {
 
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 24 — Analytics Platform
+// =============================================================================
+// Comprehensive analytics across 6 categories:
+//   1. Hotspots         — illegal mining hotspot trends, probability, risk levels
+//   2. Environmental KPIs — water quality, forest cover, sediment, protected areas
+//   3. Response Times    — investigation SLA, inspection turnaround, case resolution
+//   4. Community Engagement — reports, evidence, comments, subscriptions, shares
+//   5. Trust Metrics     — trust tiers, accuracy, reliability, fraud resistance
+//   6. Reward Metrics    — pools, contributions, distributions, ROI
+//
+// KPIs are computed live from real platform data. Snapshots are stored
+// periodically for trend analysis (comparing current vs. previous period).
+// =============================================================================
+
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  // category: hotspots | environmental | response_times | community | trust | rewards
+  category        String
+  // period: daily | weekly | monthly
+  period          String   @default("daily")
+  // snapshot date (truncated to period start)
+  snapshotDate    DateTime
+  // KPIs JSON: { kpi_name: value }
+  kpis            String   // JSON
+  // summary metrics for quick display
+  metricCount     Int      @default(0)
+  // metadata
+  computedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([category, period, snapshotDate])
+  @@index([category])
+  @@index([period])
+  @@index([snapshotDate])
+  @@index([computedAt])
+}
