@@ -1376,3 +1376,32 @@ model FusionResult {
   @@index([consensusLevel])
   @@index([createdAt])
 }
+
+model EnvironmentalPrediction {
+  id              String   @id @default(cuid())
+  type            String
+  targetEntityId  String?
+  targetName      String
+  targetType      String
+  prediction      String
+  riskScore       Float    @default(0)
+  riskLevel       String   @default("low")
+  confidence      Float    @default(0)
+  timeframe       String   @default("immediate")
+  factors         String
+  inputEntityIds  String?
+  inputSatelliteScenes String?
+  inputDetections String?
+  inputFusionIds  String?
+  affectedEntities String?
+  model           String   @default("env-intel-v1")
+  algorithm       String   @default("weighted_multi_factor")
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([riskLevel])
+  @@index([riskScore])
+  @@index([targetEntityId])
+  @@index([createdAt])
+}

@@ -590,3 +590,30 @@ Stage Summary:
 - Milestone 15 (Evidence Fusion Engine) is COMPLETE and browser-verified.
 - Delivered: Weighted Bayesian fusion merges 6 evidence source types (AI, Citizens, Satellite, Drone, Sensors, Government inspections) into one confidence score. Formula: fusedConfidence = Σ(rawConfidence × weight × reliability) / Σ(weight × reliability). Each source type has a base weight and reliability score — government inspections (98% reliable) and satellite imagery (90%) have more influence than citizen reports (60%). Conflict detection flags when sources disagree by >40%. Consensus levels (unanimous/strong/moderate/weak/divided) show how aligned the sources are.
 - Integrates ALL prior milestones: M13/M14 AI detections, M8 citizen reports, M12 satellite scenes, M7 evidence (drone/sensor/government), M9 corroboration.
+
+---
+Task ID: M16
+Agent: orchestrator
+Task: Milestone 16 — Environmental Intelligence
+
+Work Log:
+- Extended Prisma schema with EnvironmentalPrediction model (type, targetEntityId, targetName, targetType, prediction, riskScore, riskLevel, confidence, timeframe, factors JSON, inputEntityIds, inputSatelliteScenes, inputDetections, inputFusionIds, affectedEntities, model, algorithm, metadata).
+- Built prediction domain (prediction-types.ts): 5 prediction types with weighted multi-factor algorithms:
+  - sediment: Mine Proximity (0.30) + Excavation Activity (0.25) + Satellite Change (0.20) + Evidence Fusion (0.15) + Erosion Potential (0.10)
+  - river_impact: Sediment Risk (0.30) + Pollution Detections (0.25) + Detection Confidence (0.20) + Upstream Mines (0.15) + Fusion (0.10)
+  - forest_loss: Nearby Mines (0.25) + Forest Loss Detections (0.25) + Detection Confidence (0.20) + Satellite Change (0.15) + Protected Status (0.10) + Fusion (0.05)
+  - downstream_effects: Upstream Risk (0.35) + Communities at Risk (0.25) + Population Exposed (0.20) + Water Source Dependency (0.15) + Fusion (0.05)
+  - protected_area_risk: Mine Proximity (0.30) + Forest Loss (0.25) + Satellite Change (0.20) + Enforcement Level (0.15) + Fusion (0.10)
+  Each produces riskScore (0-1), riskLevel (low/moderate/high/critical), confidence, timeframe, human-readable prediction text, factor breakdown, and affected entities.
+- Built PredictionService: runAllPredictions() gathers real data from M4 twin entities (rivers, forests, protected areas), M6 knowledge graph (mine→river "affects" relationships, community→river "depends_on"), M12 satellite scenes (nearby scenes), M13 CV detections (excavation, water_changes, forest_loss), M15 fusion results → runs all 5 prediction types on each entity → persists EnvironmentalPrediction records. list(), getById(), summary().
+- Built 4 API routes: predictions/summary, predictions (list), predictions/[id], predictions/run (POST).
+- Seeded 16 environmental predictions from real data: 4 rivers × 3 prediction types (sediment, river_impact, downstream_effects) = 12, 2 forests × forest_loss = 2, 2 protected areas × protected_area_risk = 2. Results: 71% average risk score, 5 critical, 9 high, 2 moderate. By type: sediment=4 (74% avg risk), river_impact=4 (77%), downstream_effects=4 (63%), forest_loss=2 (70%), protected_area_risk=2 (69%).
+- UI: Built PredictionDashboard with 8 KPIs, Environmental Predictions feed (16 predictions with type icons, risk level badges, risk score bars, confidence, timeframe, target name, prediction text), Prediction Detail panel (risk score gauge, prediction text, factor breakdown with weighted contribution bars + descriptions, affected entities with impact levels), Risk Distribution chart (per-type average risk), Prediction Models explanation (5 models with factor descriptions + formula).
+- Updated DashboardTabs to 16 tabs (Environmental Intelligence default). Updated hero, header badge, footer, checklist.
+- `bun run lint` → 0 errors. `bun run test` → 60/60 pass.
+- Agent Browser: Environmental Intelligence tab (default) renders all sections. 16 tabs switch correctly. Summary: 16 predictions, 71% avg risk, 5 critical, 9 high, 2 moderate. No errors.
+
+Stage Summary:
+- Milestone 16 (Environmental Intelligence) is COMPLETE and browser-verified.
+- Delivered: 5 predictive models using real platform data: Sediment Flow (mine proximity + excavation + satellite change + erosion), River Impact (sediment + pollution + upstream mines), Forest Loss (mines + CV detections + satellite + protected status), Downstream Effects (upstream risk + communities + population + water dependency), Protected Area Risk (mines + forest loss + satellite + enforcement). Each model uses weighted multi-factor analysis combining data from M4 twin entities, M6 knowledge graph, M12 satellite, M13 CV detections, and M15 fusion results to produce a risk score, risk level, confidence, timeframe, and affected entities.
+- Integrates: M4 Digital Twin (rivers/forests/protected areas as targets), M6 Knowledge Graph (mine→river relationships), M12 Satellite (change detection), M13 CV (excavation/water/forest_loss detections), M15 Fusion (evidence confidence).

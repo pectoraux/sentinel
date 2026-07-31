@@ -1636,3 +1636,49 @@ model FusionResult {
   @@index([consensusLevel])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 16 — Environmental Intelligence
+// =============================================================================
+// Predictive analytics for environmental impact modeling:
+// sediment flow, river impact, forest loss, downstream effects, protected area risk.
+// Uses real data from M4 twin entities, M6 knowledge graph, M12 satellite,
+// M13 CV detections, and M15 fusion results.
+// =============================================================================
+
+model EnvironmentalPrediction {
+  id              String   @id @default(cuid())
+  // type: sediment | river_impact | forest_loss | downstream_effects | protected_area_risk
+  type            String
+  // target entity (river, forest, protected area, mine)
+  targetEntityId  String?
+  targetName      String
+  targetType      String   // river | forest | protected_area | mine | community
+  // prediction
+  prediction      String   // human-readable prediction text
+  riskScore       Float    @default(0) // 0.0-1.0 (0=safe, 1=critical)
+  riskLevel       String   @default("low") // low | moderate | high | critical
+  confidence      Float    @default(0) // 0.0-1.0
+  // timeline: when the impact is expected
+  timeframe       String   @default("immediate") // immediate | 1-3 months | 3-6 months | 6-12 months | 1+ years
+  // factors: JSON breakdown of what drives the prediction
+  factors         String   // JSON: { factor_name: { value, weight, contribution } }
+  // input data references
+  inputEntityIds  String?  // JSON array of twin entity IDs used
+  inputSatelliteScenes String? // JSON array of satellite scene IDs
+  inputDetections String?  // JSON array of detection result IDs
+  inputFusionIds  String?  // JSON array of fusion result IDs
+  // affected entities (predicted impact zone)
+  affectedEntities String? // JSON: [{ entityId, name, type, impactLevel }]
+  // metadata
+  model           String   @default("env-intel-v1")
+  algorithm       String   @default("weighted_multi_factor")
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([riskLevel])
+  @@index([riskScore])
+  @@index([targetEntityId])
+  @@index([createdAt])
+}
