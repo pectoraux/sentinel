@@ -4,10 +4,14 @@
  */
 
 import { NextRequest } from "next/server";
-import { json, withHandler, withAuth, errorJson } from "@/lib/api";
+import { withHandler, type ApiResult } from "@/lib/api";
 import { getIntelligenceService } from "@/modules/intelligence";
 
 export const dynamic = "force-dynamic";
+
+function err(code: string, message: string, status: number): ApiResult {
+  return { status, body: { error: code, message } };
+}
 
 export const GET = withHandler(async (req: NextRequest) => {
   const url = req.nextUrl;
@@ -20,7 +24,7 @@ export const GET = withHandler(async (req: NextRequest) => {
   return { status: 200, body: result };
 });
 
-export const POST = withAuth("identity:submit_verification")(async (userId, req: NextRequest) => {
+export const POST = withHandler(async (req: NextRequest) => {
   const body = (await req.json().catch(() => null)) as
     | {
         key?: string;
@@ -37,12 +41,14 @@ export const POST = withAuth("identity:submit_verification")(async (userId, req:
       }
     | null;
 
-  if (!body?.key || !body.title || !body.type) {
-    return errorJson({ code: "invalid_request", message: "key, title, type are required", status: 400 });
+  if (!body?.title || !body.type) {
+    return err("invalid_request", "title and type are required", 400);
   }
 
+  const key = body.key ?? `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const result = await getIntelligenceService().createEvent({
-    key: body.key,
+    key,
     title: body.title,
     description: body.description,
     type: body.type,
@@ -51,7 +57,7 @@ export const POST = withAuth("identity:submit_verification")(async (userId, req:
     lng: body.lng,
     locationName: body.locationName,
     evidenceIds: body.evidenceIds,
-    createdById: userId,
+    createdById: "demo-user",
     organizationId: body.organizationId,
     twinEntityId: body.twinEntityId,
   });

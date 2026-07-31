@@ -1,9 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Target, MapPin, Clock, Award, Users, Camera, CheckCircle, Plane, Cpu, ClipboardCheck, Brain, Loader2, ChevronRight, AlertTriangle, Zap } from "lucide-react";
+import {
+  Target, MapPin, Clock, Award, Users, Camera, CheckCircle, Plane, Cpu, ClipboardCheck, Brain, Loader2, AlertTriangle, Zap,
+  Send,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +21,6 @@ const TYPE_COLOR: Record<string, string> = {
   drone_survey: "#14b8a6", sensor_check: "#a78bfa", witness_interview: "#ef4444",
 };
 const PRIORITY_COLOR: Record<string, string> = { low: "text-muted-foreground", medium: "text-sky-500", high: "text-amber-500", urgent: "text-destructive" };
-const PRIORITY_BG: Record<string, string> = { low: "bg-muted-foreground", medium: "bg-sky-500", high: "bg-amber-500", urgent: "bg-destructive" };
 const STATUS_COLOR: Record<string, string> = { open: "text-sky-500", assigned: "text-violet-500", in_progress: "text-amber-500", submitted: "text-teal-500", verified: "text-emerald-500", completed: "text-muted-foreground", expired: "text-destructive", cancelled: "text-muted-foreground" };
 const QUALITY_COLOR: Record<string, string> = { low: "text-destructive", medium: "text-amber-500", high: "text-sky-500", excellent: "text-emerald-500" };
 
@@ -26,16 +30,82 @@ export function MissionDashboard({ initialSummary }: { initialSummary: any }) {
   const [summary, setSummary] = React.useState(initialSummary);
   const [missions, setMissions] = React.useState<any[]>(initialSummary.recent ?? []);
 
+  // Action state
+  const [actionLoading, setActionLoading] = React.useState<Record<string, boolean>>({});
+  const [submitOpen, setSubmitOpen] = React.useState<Record<string, boolean>>({});
+  const [submitNotes, setSubmitNotes] = React.useState<Record<string, string>>({});
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2400);
+  };
+
   const refresh = React.useCallback(async () => {
     try {
-      const [s,r] = await Promise.all([fetch("/api/v1/missions/summary",{cache:"no-store"}), fetch("/api/v1/missions?limit=50",{cache:"no-store"})]);
+      const [s] = await Promise.all([fetch("/api/v1/missions/summary",{cache:"no-store"})]);
       if (s.ok) { const sd=await s.json(); setSummary(sd); setMissions(sd.recent ?? []); }
     } catch {}
   }, []);
   React.useEffect(() => { const id=setInterval(refresh,30000); return ()=>clearInterval(id); }, [refresh]);
 
+  // --- Accept mission
+  const acceptMission = async (missionId: string) => {
+    setActionLoading((s) => ({ ...s, [`accept-${missionId}`]: true }));
+    try {
+      const res = await fetch(`/api/v1/missions/${missionId}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        showToast("Mission accepted — status: assigned");
+        await refresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? `Accept failed (${res.status})`);
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setActionLoading((s) => ({ ...s, [`accept-${missionId}`]: false }));
+    }
+  };
+
+  // --- Submit evidence
+  const submitEvidence = async (missionId: string) => {
+    const notes = (submitNotes[missionId] ?? "").trim();
+    if (!notes) return;
+    setActionLoading((s) => ({ ...s, [`submit-${missionId}`]: true }));
+    try {
+      const res = await fetch(`/api/v1/missions/${missionId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes, evidenceIds: [] }),
+      });
+      if (res.ok) {
+        setSubmitNotes((s) => ({ ...s, [missionId]: "" }));
+        setSubmitOpen((s) => ({ ...s, [missionId]: false }));
+        showToast("Evidence submitted for verification");
+        await refresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? `Submit failed (${res.status})`);
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setActionLoading((s) => ({ ...s, [`submit-${missionId}`]: false }));
+    }
+  };
+
   return (
     <div className="space-y-4 min-w-0 overflow-hidden">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400 shadow-lg backdrop-blur">
+          {toast}
+        </div>
+      )}
+
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         <MissKpi icon={Target} label="Missions" value={summary.total ?? 0} hint="AI-created" />
@@ -61,6 +131,8 @@ export function MissionDashboard({ initialSummary }: { initialSummary: any }) {
               {missions.map((m:any) => {
                 const Icon = TYPE_ICON[m.type] ?? Camera;
                 const color = TYPE_COLOR[m.type] ?? "#6b7280";
+                const canAccept = m.status === "open";
+                const canSubmit = m.status === "in_progress" || m.status === "assigned";
                 return (
                   <div key={m.id} className={cn("rounded-lg border p-3", m.status === "verified" ? "border-emerald-500/30 bg-emerald-500/5" : m.status === "in_progress" ? "border-amber-500/30 bg-amber-500/5" : "border-border bg-card/50")}>
                     <div className="flex items-start gap-3">
@@ -85,6 +157,67 @@ export function MissionDashboard({ initialSummary }: { initialSummary: any }) {
                           </span>
                           {m.triggerDescription && <span className="text-[9px] italic truncate max-w-[200px]">{m.triggerDescription}</span>}
                         </div>
+
+                        {/* Action buttons */}
+                        {(canAccept || canSubmit) && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/40 pt-2">
+                            {canAccept && (
+                              <Button
+                                size="sm"
+                                onClick={() => acceptMission(m.id)}
+                                disabled={actionLoading[`accept-${m.id}`]}
+                                className="h-7 gap-1 text-xs"
+                              >
+                                {actionLoading[`accept-${m.id}`] ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="h-3 w-3" />
+                                )}
+                                Accept Mission
+                              </Button>
+                            )}
+                            {canSubmit && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSubmitOpen((s) => ({ ...s, [m.id]: !s[m.id] }))}
+                                className="h-7 gap-1 text-xs"
+                              >
+                                <Camera className="h-3 w-3" />
+                                Submit Evidence
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        {submitOpen[m.id] && (
+                          <div className="mt-2 space-y-2">
+                            <Textarea
+                              placeholder="Evidence notes — describe what you observed, attach photo metadata, etc..."
+                              value={submitNotes[m.id] ?? ""}
+                              onChange={(e) => setSubmitNotes((s) => ({ ...s, [m.id]: e.target.value }))}
+                              className="min-h-[60px] text-xs"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" onClick={() => setSubmitOpen((s) => ({ ...s, [m.id]: false }))} disabled={actionLoading[`submit-${m.id}`]} className="h-7 text-xs">
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => submitEvidence(m.id)}
+                                disabled={actionLoading[`submit-${m.id}`] || !(submitNotes[m.id] ?? "").trim()}
+                                className="h-7 gap-1 text-xs"
+                              >
+                                {actionLoading[`submit-${m.id}`] ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                                Submit
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

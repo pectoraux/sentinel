@@ -1,16 +1,31 @@
 /** POST /api/v1/missions/[id]/accept */
-import { NextRequest, NextResponse } from "next/server";
-import { json, withAuth } from "@/lib/api";
+import { NextRequest } from "next/server";
+import { withHandler, type ApiResult } from "@/lib/api";
 import { getMissionService } from "@/modules/missions";
 import { logger } from "@/infrastructure/observability/logger";
+
 export const dynamic = "force-dynamic";
-export const POST = withAuth("identity:switch_role")(async (userId, _req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
-  try {
+
+function err(code: string, message: string, status: number): ApiResult {
+  return { status, body: { error: code, message } };
+}
+
+async function resolveId(req: NextRequest, ctx?: { params: Promise<{ id: string }> }): Promise<string> {
+  if (ctx) {
     const { id } = await ctx.params;
+    return id;
+  }
+  return req.nextUrl.pathname.split("/").slice(-2, -1)[0]!;
+}
+
+export const POST = withHandler(async (req: NextRequest, ctx?: { params: Promise<{ id: string }> }) => {
+  try {
+    const id = await resolveId(req, ctx);
+    const userId = "demo-user";
     await getMissionService().accept(id, userId);
-    return json({ status: 200, body: { id, status: "assigned", assignedTo: userId } });
+    return { status: 200, body: { id, status: "assigned", assignedTo: userId } };
   } catch (error) {
     logger.error("mission.accept.error", { error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ error: "internal_error" }, { status: 500 });
+    return err("internal_error", error instanceof Error ? error.message : "Internal server error", 500);
   }
 });

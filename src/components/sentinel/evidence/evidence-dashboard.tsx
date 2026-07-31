@@ -19,9 +19,13 @@ import {
   XCircle,
   AlertTriangle,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +44,17 @@ const TYPE_COLOR: Record<string, string> = {
   image: "#0ea5e9", video: "#ef4444", audio: "#f59e0b", document: "#22c55e",
   gps_track: "#8b5cf6", sensor_log: "#14b8a6", report: "#a78bfa", other: "#64748b",
 };
+
+const TYPE_OPTIONS = [
+  { value: "image", label: "Image", mediaType: "image/jpeg" },
+  { value: "video", label: "Video", mediaType: "video/mp4" },
+  { value: "audio", label: "Audio", mediaType: "audio/mpeg" },
+  { value: "document", label: "Document", mediaType: "application/pdf" },
+  { value: "gps_track", label: "GPS Track", mediaType: "application/gpx+xml" },
+  { value: "sensor_log", label: "Sensor Log", mediaType: "application/json" },
+  { value: "report", label: "Report", mediaType: "application/pdf" },
+  { value: "other", label: "Other", mediaType: "application/octet-stream" },
+];
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -64,6 +79,25 @@ export function EvidenceDashboard({ initialSummary }: { initialSummary: any }) {
   const [verifyResult, setVerifyResult] = React.useState<any>(null);
   const [loadingDetail, setLoadingDetail] = React.useState(false);
   const [loadingVerify, setLoadingVerify] = React.useState(false);
+
+  // Upload form state
+  const [showUpload, setShowUpload] = React.useState(false);
+  const [uploadForm, setUploadForm] = React.useState({
+    title: "",
+    type: "image",
+    description: "",
+    lat: "",
+    lng: "",
+    storageKey: "",
+  });
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2400);
+  };
 
   const refresh = React.useCallback(async () => {
     try {
@@ -97,11 +131,52 @@ export function EvidenceDashboard({ initialSummary }: { initialSummary: any }) {
     setLoadingVerify(false);
   };
 
+  const submitUpload = async () => {
+    if (!uploadForm.title.trim()) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const typeOpt = TYPE_OPTIONS.find((t) => t.value === uploadForm.type);
+      const payload: any = {
+        title: uploadForm.title.trim(),
+        type: uploadForm.type,
+        mediaType: typeOpt?.mediaType ?? "application/octet-stream",
+        description: uploadForm.description.trim(),
+        storageKey: uploadForm.storageKey.trim() || undefined,
+      };
+      if (uploadForm.lat) payload.lat = Number(uploadForm.lat);
+      if (uploadForm.lng) payload.lng = Number(uploadForm.lng);
+      const res = await fetch("/api/v1/evidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message ?? `Failed (${res.status})`);
+      }
+      setShowUpload(false);
+      setUploadForm({ title: "", type: "image", description: "", lat: "", lng: "", storageKey: "" });
+      await refresh();
+      showToast("Evidence uploaded — hash chain created");
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const totalSize = summary.totalSizeBytes ?? 0;
   const recentUploads = summary.recentUploads ?? [];
 
   return (
     <div className="space-y-4 min-w-0 overflow-hidden">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400 shadow-lg backdrop-blur">
+          {toast}
+        </div>
+      )}
+
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <EvKpi icon={FileText} label="Total Evidence" value={summary.total ?? 0} hint={`${summary.byType?.length ?? 0} types`} />
@@ -122,17 +197,88 @@ export function EvidenceDashboard({ initialSummary }: { initialSummary: any }) {
                 <FileText className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm">Evidence Gallery</CardTitle>
               </div>
-              <div className="flex items-center gap-2">
-                {summary.byType?.map((t: any) => (
-                  <span key={t.type} className="flex items-center gap-1 text-[10px]">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TYPE_COLOR[t.type] ?? "#6b7280" }} />
-                    <span className="text-muted-foreground">{t.count}</span>
-                  </span>
-                ))}
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-2">
+                  {summary.byType?.map((t: any) => (
+                    <span key={t.type} className="flex items-center gap-1 text-[10px]">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TYPE_COLOR[t.type] ?? "#6b7280" }} />
+                      <span className="text-muted-foreground">{t.count}</span>
+                    </span>
+                  ))}
+                </div>
+                <Button size="sm" onClick={() => setShowUpload((s) => !s)} className="h-7 gap-1 text-xs">
+                  {showUpload ? (
+                    <XCircle className="h-3.5 w-3.5" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                  {showUpload ? "Close" : "Upload"}
+                </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
+            {showUpload && (
+              <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-primary">Upload Evidence</p>
+                <Input
+                  placeholder="Title (e.g. Excavator photo at site B)"
+                  value={uploadForm.title}
+                  onChange={(e) => setUploadForm((s) => ({ ...s, title: e.target.value }))}
+                  className="h-8 text-sm"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={uploadForm.type}
+                    onChange={(e) => setUploadForm((s) => ({ ...s, type: e.target.value }))}
+                    className="h-8 rounded-md border border-border bg-card px-2 text-sm"
+                  >
+                    {TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <Input
+                    placeholder="Storage key (demo)"
+                    value={uploadForm.storageKey}
+                    onChange={(e) => setUploadForm((s) => ({ ...s, storageKey: e.target.value }))}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <Textarea
+                  placeholder="Description..."
+                  value={uploadForm.description}
+                  onChange={(e) => setUploadForm((s) => ({ ...s, description: e.target.value }))}
+                  className="min-h-[60px] text-sm"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Lat"
+                    value={uploadForm.lat}
+                    onChange={(e) => setUploadForm((s) => ({ ...s, lat: e.target.value }))}
+                    className="h-8 text-sm"
+                  />
+                  <Input
+                    placeholder="Lng"
+                    value={uploadForm.lng}
+                    onChange={(e) => setUploadForm((s) => ({ ...s, lng: e.target.value }))}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                {uploadError && (
+                  <p className="text-[11px] text-destructive">{uploadError}</p>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setShowUpload(false)} disabled={uploading} className="h-7 text-xs">
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={submitUpload} disabled={uploading || !uploadForm.title.trim()} className="h-7 text-xs gap-1">
+                    {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    Upload &amp; Hash
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[450px] overflow-y-auto -mr-2 pr-2">
               {recentUploads.map((ev: any) => {
                 const Icon = TYPE_ICON[ev.type] ?? FileText;

@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -51,19 +53,33 @@ export function CorroborationDashboard({ initialSummary }: { initialSummary: any
   const [corroboration, setCorroboration] = React.useState<any>(null);
   const [loadingDetail, setLoadingDetail] = React.useState(false);
   const [duplicates, setDuplicates] = React.useState<any>(null);
-  const [loadingDupes, setLoadingDupes] = React.useState(false);
+
+  // Action state
+  const [actionLoading, setActionLoading] = React.useState<Record<string, boolean>>({});
+  const [disputeOpen, setDisputeOpen] = React.useState<Record<string, boolean>>({});
+  const [disputeReason, setDisputeReason] = React.useState<Record<string, string>>({});
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2400);
+  };
 
   // Load evidence list
-  React.useEffect(() => {
+  const reloadEvidence = React.useCallback(() => {
     fetch("/api/v1/evidence?limit=20")
       .then((r) => r.json())
       .then((data) => setEvidence(data.evidence ?? []))
       .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    reloadEvidence();
     fetch("/api/v1/evidence/duplicates")
       .then((r) => r.json())
       .then((data) => setDuplicates(data))
       .catch(() => {});
-  }, []);
+  }, [reloadEvidence]);
 
   // Load corroboration details when evidence is selected
   React.useEffect(() => {
@@ -88,8 +104,74 @@ export function CorroborationDashboard({ initialSummary }: { initialSummary: any
     return () => clearInterval(id);
   }, [refresh]);
 
+  const reloadAfterAction = React.useCallback(async () => {
+    await Promise.all([refresh(), reloadEvidence()]);
+    if (selectedEvidence) {
+      fetch(`/api/v1/evidence/${selectedEvidence.id}/confidence`)
+        .then((r) => r.json())
+        .then((data) => setCorroboration(data))
+        .catch(() => {});
+    }
+  }, [refresh, reloadEvidence, selectedEvidence]);
+
+  // --- Support
+  const supportEvidence = async (evidenceId: string) => {
+    setActionLoading((s) => ({ ...s, [`support-${evidenceId}`]: true }));
+    try {
+      const res = await fetch(`/api/v1/evidence/${evidenceId}/corroborate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "support", reason: "I can verify this evidence" }),
+      });
+      if (res.ok) {
+        showToast("Evidence supported ✓");
+        await reloadAfterAction();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? "Support failed");
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setActionLoading((s) => ({ ...s, [`support-${evidenceId}`]: false }));
+    }
+  };
+
+  // --- Dispute
+  const submitDispute = async (evidenceId: string) => {
+    const reason = (disputeReason[evidenceId] ?? "").trim();
+    if (!reason) return;
+    setActionLoading((s) => ({ ...s, [`dispute-${evidenceId}`]: true }));
+    try {
+      const res = await fetch(`/api/v1/evidence/${evidenceId}/dispute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      if (res.ok) {
+        setDisputeReason((s) => ({ ...s, [evidenceId]: "" }));
+        setDisputeOpen((s) => ({ ...s, [evidenceId]: false }));
+        showToast("Dispute recorded");
+        await reloadAfterAction();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? "Dispute failed");
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setActionLoading((s) => ({ ...s, [`dispute-${evidenceId}`]: false }));
+    }
+  };
+
   return (
     <div className="space-y-4 min-w-0 overflow-hidden">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400 shadow-lg backdrop-blur">
+          {toast}
+        </div>
+      )}
+
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <CorKpi icon={ThumbsUp} label="Supports" value={summary.supports ?? 0} hint="corroborations" />
@@ -115,9 +197,8 @@ export function CorroborationDashboard({ initialSummary }: { initialSummary: any
               {summary.topEvidence?.map((item: any) => {
                 const tierMeta = TIER_COLOR[item.tier] ?? TIER_COLOR.unverified;
                 return (
-                  <button
+                  <div
                     key={item.evidenceId}
-                    onClick={() => setSelectedEvidence({ id: item.evidenceId, ...item.evidence })}
                     className={cn(
                       "w-full text-left rounded-lg border p-3 transition-colors",
                       selectedEvidence?.id === item.evidenceId
@@ -125,37 +206,90 @@ export function CorroborationDashboard({ initialSummary }: { initialSummary: any
                         : "border-border bg-card/50 hover:bg-accent/50",
                     )}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{item.evidence?.title ?? "Unknown"}</p>
-                        <p className="text-[10px] text-muted-foreground capitalize">{item.evidence?.type?.replace(/_/g, " ")}</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold", tierMeta.bg, tierMeta.color)}>
-                          {Math.round(item.weight * 100)}%
+                    <button
+                      onClick={() => setSelectedEvidence({ id: item.evidenceId, ...item.evidence })}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{item.evidence?.title ?? "Unknown"}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{item.evidence?.type?.replace(/_/g, " ")}</p>
                         </div>
-                        <p className={cn("mt-0.5 text-[9px] font-medium capitalize", tierMeta.color)}>{item.tier}</p>
+                        <div className="text-right flex-shrink-0">
+                          <div className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold", tierMeta.bg, tierMeta.color)}>
+                            {Math.round(item.weight * 100)}%
+                          </div>
+                          <p className={cn("mt-0.5 text-[9px] font-medium capitalize", tierMeta.color)}>{item.tier}</p>
+                        </div>
                       </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-0.5">
+                          <ThumbsUp className="h-2.5 w-2.5 text-emerald-500" />
+                          {item.supportCount}
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <ThumbsDown className="h-2.5 w-2.5 text-destructive" />
+                          {item.disputeCount}
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <Users className="h-2.5 w-2.5 text-violet-500" />
+                          {item.independentCount}
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <TrendingUp className="h-2.5 w-2.5 text-sky-500" />
+                          {Math.round(item.confidence * 100)}% conf
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Action buttons */}
+                    <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/40 pt-2">
+                      <button
+                        onClick={() => supportEvidence(item.evidenceId)}
+                        disabled={actionLoading[`support-${item.evidenceId}`]}
+                        className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 transition-colors disabled:opacity-50"
+                      >
+                        {actionLoading[`support-${item.evidenceId}`] ? (
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                        ) : (
+                          <ThumbsUp className="h-2.5 w-2.5" />
+                        )}
+                        Support
+                      </button>
+                      <button
+                        onClick={() => setDisputeOpen((s) => ({ ...s, [item.evidenceId]: !s[item.evidenceId] }))}
+                        className="inline-flex items-center gap-1 rounded bg-destructive/10 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                      >
+                        <ThumbsDown className="h-2.5 w-2.5" />
+                        Dispute
+                      </button>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
-                      <span className="flex items-center gap-0.5">
-                        <ThumbsUp className="h-2.5 w-2.5 text-emerald-500" />
-                        {item.supportCount}
-                      </span>
-                      <span className="flex items-center gap-0.5">
-                        <ThumbsDown className="h-2.5 w-2.5 text-destructive" />
-                        {item.disputeCount}
-                      </span>
-                      <span className="flex items-center gap-0.5">
-                        <Users className="h-2.5 w-2.5 text-violet-500" />
-                        {item.independentCount}
-                      </span>
-                      <span className="flex items-center gap-0.5">
-                        <TrendingUp className="h-2.5 w-2.5 text-sky-500" />
-                        {Math.round(item.confidence * 100)}% conf
-                      </span>
-                    </div>
-                  </button>
+
+                    {disputeOpen[item.evidenceId] && (
+                      <div className="mt-2 flex items-end gap-2">
+                        <Textarea
+                          placeholder="Reason for dispute (required)..."
+                          value={disputeReason[item.evidenceId] ?? ""}
+                          onChange={(e) => setDisputeReason((s) => ({ ...s, [item.evidenceId]: e.target.value }))}
+                          className="min-h-[40px] text-xs"
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => submitDispute(item.evidenceId)}
+                          disabled={actionLoading[`dispute-${item.evidenceId}`] || !(disputeReason[item.evidenceId] ?? "").trim()}
+                          className="h-8 gap-1 text-xs"
+                        >
+                          {actionLoading[`dispute-${item.evidenceId}`] ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <ThumbsDown className="h-3 w-3" />
+                          )}
+                          Submit
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {(!summary.topEvidence || summary.topEvidence.length === 0) && (

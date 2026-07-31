@@ -55,12 +55,12 @@ export class IntelligenceService {
         organizationId: params.organizationId,
         twinEntityId: params.twinEntityId,
         evidenceIds: params.evidenceIds ? JSON.stringify(params.evidenceIds) : null,
-        streamVersion: 1,
+        streamVersion: 0,
       },
     });
 
-    // Append "created" event to the stream
-    await this.appendEvent(event.id, {
+    // Append "created" event to the stream (this creates stream entry v1 and returns 1)
+    const createdVersion = await this.appendEvent(event.id, {
       eventType: "created",
       actorId: params.createdById,
       actorType: "user",
@@ -76,6 +76,12 @@ export class IntelligenceService {
       },
     });
 
+    // Persist the new streamVersion on the projection so subsequent appends don't collide
+    await db.intelligenceEvent.update({
+      where: { id: event.id },
+      data: { streamVersion: createdVersion },
+    });
+
     // Outbox for cross-context event bus
     await db.outboxEvent.create({
       data: {
@@ -88,7 +94,7 @@ export class IntelligenceService {
     });
 
     logger.info("intelligence.event.created", { id: event.id, type: params.type, key: params.key });
-    return { id: event.id, streamVersion: 1 };
+    return { id: event.id, streamVersion: createdVersion };
   }
 
   /**

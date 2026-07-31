@@ -19,9 +19,11 @@ import {
   Eye,
   Gavel,
   TrendingUp,
+  Radar,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +94,18 @@ export function FraudDashboard({ initialSummary }: { initialSummary: any }) {
   const [selected, setSelected] = React.useState<any>(null);
   const [loadingDetail, setLoadingDetail] = React.useState(false);
 
+  // Action state
+  const [actionLoading, setActionLoading] = React.useState<Record<string, boolean>>({});
+  const [resolveOpen, setResolveOpen] = React.useState<Record<string, boolean>>({});
+  const [resolveChoice, setResolveChoice] = React.useState<Record<string, string>>({});
+  const [scanning, setScanning] = React.useState(false);
+  const [toast, setToast] = React.useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2400);
+  };
+
   React.useEffect(() => {
     if (!selected) return;
     setLoadingDetail(true);
@@ -117,8 +131,102 @@ export function FraudDashboard({ initialSummary }: { initialSummary: any }) {
     return () => clearInterval(id);
   }, [refresh]);
 
+  // --- Run scan
+  const runScan = async () => {
+    setScanning(true);
+    try {
+      const res = await fetch("/api/v1/fraud/scan", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const totalNew = data?.totalAlerts ?? data?.newAlerts ?? "";
+        showToast(totalNew ? `Scan complete — ${totalNew} alerts now tracked` : "Scan complete");
+        await refresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? `Scan failed (${res.status})`);
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // --- Investigate
+  const investigate = async (alertId: string) => {
+    setActionLoading((s) => ({ ...s, [`inv-${alertId}`]: true }));
+    try {
+      const res = await fetch(`/api/v1/fraud/alerts/${alertId}/investigate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          findings: { reviewedBy: "demo-user", manual: true },
+          recommendedAction: "review_evidence",
+          notes: "Investigation opened from dashboard",
+        }),
+      });
+      if (res.ok) {
+        showToast("Investigation opened");
+        await refresh();
+        if (selected?.id === alertId) {
+          fetch(`/api/v1/fraud/alerts/${alertId}`)
+            .then((r) => r.json())
+            .then((d) => setSelected(d))
+            .catch(() => {});
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? `Investigate failed (${res.status})`);
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setActionLoading((s) => ({ ...s, [`inv-${alertId}`]: false }));
+    }
+  };
+
+  // --- Resolve
+  const resolveAlert = async (alertId: string) => {
+    const resolution = resolveChoice[alertId] ?? "dismissed";
+    setActionLoading((s) => ({ ...s, [`res-${alertId}`]: true }));
+    try {
+      const res = await fetch(`/api/v1/fraud/alerts/${alertId}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resolution,
+          notes: `Resolved from dashboard as ${resolution}`,
+        }),
+      });
+      if (res.ok) {
+        setResolveOpen((s) => ({ ...s, [alertId]: false }));
+        showToast(`Alert ${resolution}`);
+        await refresh();
+        if (selected?.id === alertId) {
+          fetch(`/api/v1/fraud/alerts/${alertId}`)
+            .then((r) => r.json())
+            .then((d) => setSelected(d))
+            .catch(() => {});
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.message ?? `Resolve failed (${res.status})`);
+      }
+    } catch {
+      showToast("Network error");
+    } finally {
+      setActionLoading((s) => ({ ...s, [`res-${alertId}`]: false }));
+    }
+  };
+
   return (
     <div className="space-y-4 min-w-0 overflow-hidden">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400 shadow-lg backdrop-blur">
+          {toast}
+        </div>
+      )}
+
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         <FraudKpi icon={AlertTriangle} label="Total Alerts" value={summary.totalAlerts ?? 0} hint="all detectors" />
@@ -140,7 +248,13 @@ export function FraudDashboard({ initialSummary }: { initialSummary: any }) {
                 <AlertTriangle className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm">Fraud Alerts</CardTitle>
               </div>
-              <Badge variant="outline" className="text-[10px]">7 detectors · AI-powered</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px]">7 detectors · AI-powered</Badge>
+                <Button size="sm" onClick={runScan} disabled={scanning} className="h-7 gap-1 text-xs">
+                  {scanning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Radar className="h-3 w-3" />}
+                  Run Scan
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -148,41 +262,120 @@ export function FraudDashboard({ initialSummary }: { initialSummary: any }) {
               {alerts.map((alert: any) => {
                 const Icon = TYPE_ICON[alert.type] ?? AlertTriangle;
                 const color = TYPE_COLOR[alert.type] ?? "#6b7280";
+                const canInvestigate = alert.status === "detected";
+                const canResolve = alert.status === "investigating" || alert.status === "detected";
                 return (
-                  <button
+                  <div
                     key={alert.id}
-                    onClick={() => setSelected(alert)}
                     className={cn(
                       "w-full text-left rounded-lg border p-3 transition-colors",
                       selected?.id === alert.id ? "border-primary bg-primary/5" : "border-border bg-card/50 hover:bg-accent/50",
                     )}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: color + "20", color }}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-[9px]" style={{ color }}>{TYPE_LABEL[alert.type] ?? alert.type}</Badge>
-                          <Badge variant="outline" className={cn("text-[9px] capitalize font-medium", SEVERITY_COLOR[alert.severity])}>{alert.severity}</Badge>
-                          <Badge variant="outline" className={cn("text-[9px] capitalize", STATUS_COLOR[alert.status])}>{alert.status}</Badge>
-                          <span className="ml-auto text-[9px] text-muted-foreground">{timeAgo(alert.detectedAt)}</span>
+                    <button
+                      onClick={() => setSelected(alert)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: color + "20", color }}>
+                          <Icon className="h-5 w-5" />
                         </div>
-                        <p className="mt-1 text-xs font-medium leading-tight line-clamp-2">{alert.title}</p>
-                        <div className="mt-1.5 flex items-center gap-3 text-[10px]">
-                          <span className="flex items-center gap-1">
-                            <span className="text-muted-foreground">Confidence</span>
-                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                              <div className="h-full" style={{ width: `${alert.confidence * 100}%`, backgroundColor: color }} />
-                            </div>
-                            <span className="font-bold tabular-nums">{Math.round(alert.confidence * 100)}%</span>
-                          </span>
-                          <span className="text-muted-foreground">·</span>
-                          <span className="text-muted-foreground">{alert.signalCount} signals</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline" className="text-[9px]" style={{ color }}>{TYPE_LABEL[alert.type] ?? alert.type}</Badge>
+                            <Badge variant="outline" className={cn("text-[9px] capitalize font-medium", SEVERITY_COLOR[alert.severity])}>{alert.severity}</Badge>
+                            <Badge variant="outline" className={cn("text-[9px] capitalize", STATUS_COLOR[alert.status])}>{alert.status}</Badge>
+                            <span className="ml-auto text-[9px] text-muted-foreground">{timeAgo(alert.detectedAt)}</span>
+                          </div>
+                          <p className="mt-1 text-xs font-medium leading-tight line-clamp-2">{alert.title}</p>
+                          <div className="mt-1.5 flex items-center gap-3 text-[10px]">
+                            <span className="flex items-center gap-1">
+                              <span className="text-muted-foreground">Confidence</span>
+                              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                                <div className="h-full" style={{ width: `${alert.confidence * 100}%`, backgroundColor: color }} />
+                              </div>
+                              <span className="font-bold tabular-nums">{Math.round(alert.confidence * 100)}%</span>
+                            </span>
+                            <span className="text-muted-foreground">·</span>
+                            <span className="text-muted-foreground">{alert.signalCount} signals</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    {/* Action buttons */}
+                    {(canInvestigate || canResolve) && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/40 pt-2">
+                        {canInvestigate && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => investigate(alert.id)}
+                            disabled={actionLoading[`inv-${alert.id}`]}
+                            className="h-7 gap-1 text-xs"
+                          >
+                            {actionLoading[`inv-${alert.id}`] ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Eye className="h-3 w-3" />
+                            )}
+                            Investigate
+                          </Button>
+                        )}
+                        {canResolve && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setResolveOpen((s) => ({ ...s, [alert.id]: !s[alert.id] }))}
+                            className="h-7 gap-1 text-xs"
+                          >
+                            <Gavel className="h-3 w-3" />
+                            Resolve
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {resolveOpen[alert.id] && (
+                      <div className="mt-2 space-y-2 border-t border-border/40 pt-2">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Resolution</p>
+                        <div className="flex flex-wrap gap-1">
+                          {["dismissed", "confirmed", "escalated"].map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => setResolveChoice((s) => ({ ...s, [alert.id]: r }))}
+                              className={cn(
+                                "rounded-md border px-2 py-1 text-[10px] font-medium transition-colors capitalize",
+                                (resolveChoice[alert.id] ?? "dismissed") === r
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border bg-card hover:bg-accent text-muted-foreground",
+                              )}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setResolveOpen((s) => ({ ...s, [alert.id]: false }))} disabled={actionLoading[`res-${alert.id}`]} className="h-7 text-xs">
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => resolveAlert(alert.id)}
+                            disabled={actionLoading[`res-${alert.id}`]}
+                            className="h-7 gap-1 text-xs"
+                          >
+                            {actionLoading[`res-${alert.id}`] ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-3 w-3" />
+                            )}
+                            Confirm Resolution
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {alerts.length === 0 && <p className="py-8 text-center text-xs text-muted-foreground">No fraud alerts detected.</p>}
