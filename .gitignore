@@ -40,7 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
+# local-*  # Commented out — was matching src/infrastructure/storage/local-storage.ts
 .claude
 .z-ai-config
 *.log

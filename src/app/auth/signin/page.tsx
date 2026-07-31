@@ -98,6 +98,22 @@ function callbackError(code: string | null): string | null {
 }
 
 export default function SignInPage() {
+  return (
+    <React.Suspense fallback={<SignInLoading />}>
+      <SignInContent />
+    </React.Suspense>
+  );
+}
+
+function SignInLoading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-slate-950 dark:via-slate-900 dark:to-emerald-950">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+    </div>
+  );
+}
+
+function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
