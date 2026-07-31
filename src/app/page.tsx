@@ -49,12 +49,14 @@ import { IntelligenceDashboard } from "@/components/sentinel/intelligence/intell
 import { CorroborationDashboard } from "@/components/sentinel/corroboration/corroboration-dashboard";
 import { TrustDashboard } from "@/components/sentinel/trust/trust-dashboard";
 import { NotificationDashboard } from "@/components/sentinel/notifications/notification-dashboard";
+import { SatelliteDashboard } from "@/components/sentinel/satellite/satellite-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
 import { getCivilTrustService } from "@/modules/trust";
 import { getIntelligenceService } from "@/modules/intelligence";
 import { getNotificationService } from "@/modules/notifications";
+import { getSatelliteIngestionService } from "@/modules/satellite";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -81,6 +83,7 @@ export default async function DashboardPage() {
     corroborationSummary,
     trustSummary,
     notificationSummary,
+    satelliteSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -101,6 +104,7 @@ export default async function DashboardPage() {
     getCorroborationService().summary(),
     getCivilTrustService().summary(),
     getNotificationService().summary(),
+    getSatelliteIngestionService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -182,7 +186,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M11 · Notifications
+                  M12 · Satellite
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -211,7 +215,7 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Notification Platform
+                Satellite Ingestion
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                 Production trust system replacing reputation. Tracks accuracy, reliability,
@@ -233,7 +237,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M10: Notification Platform (first child = first tab, default) === */}
+          {/* === M10: Satellite Ingestion (first child = first tab, default) === */}
+          <SatelliteDashboard initialSummary={satelliteSummary} />
+
+          {/* === M11: Notification Platform (second child = second tab) === */}
           <NotificationDashboard initialSummary={notificationSummary} />
 
           {/* === M10: Civil Trust Engine (second child = second tab) === */}
@@ -530,12 +537,12 @@ export default async function DashboardPage() {
                     "M9: Independent Corroboration + Duplicate Detection",
                     "M9: Witness Confidence + Evidence Weighting",
                     "M9: 5-Tier System (Unverified→Confirmed)",
-                    "M10: Notification Platform (8-Factor)",
+                    "M10: Satellite Ingestion (8-Factor)",
                     "M10: Accuracy · Reliability · False Reports",
                     "M10: Evidence Quality · Contribution Quality · Impact",
                     "M10: Decay (90-day half-life) · Fraud Resistance",
-                    "M12: Intelligence Engine (next)",
-                    "M13: Predictive Analytics (next)",
+                    "M13: Intelligence Engine (next)",
+                    "M14: Predictive Analytics (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -554,13 +561,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M11 — Notifications</span>
+            <span>Sentinel Platform · M12 — Satellite</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
-            <Link href="/api/v1/notifications/summary" className="hover:text-foreground transition-colors">Notifications</Link>
+            <Link href="/api/v1/satellite/summary" className="hover:text-foreground transition-colors">Satellite</Link>
             <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
             <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
             <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>

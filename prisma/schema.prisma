@@ -1309,3 +1309,140 @@ model GeofenceSubscription {
   @@index([isActive])
   @@index([centerLat, centerLng])
 }
+
+// =============================================================================
+// MILESTONE 12 — Satellite Ingestion
+// =============================================================================
+// Satellite imagery ingestion pipeline: Sentinel-2, Landsat-8.
+// Raster processing → tiling → caching → historical archive.
+// Scheduled acquisition with metadata tracking.
+// =============================================================================
+
+model SatelliteScene {
+  id              String   @id @default(cuid())
+  sceneId         String   @unique // official scene ID (e.g. "S2A_MSIL2A_20240715T103021_N0509_R108_T30NWN")
+  satellite       String   // sentinel2 | landsat8 | sentinel1 | landsat9
+  sensor          String   // MSI (Sentinel-2) | OLI_TIRS (Landsat-8)
+  // acquisition
+  acquisitionDate DateTime
+  cloudCover      Float    @default(0) // percentage 0-100
+  sunAzimuth      Float?
+  sunElevation    Float?
+  // spatial
+  crs             String   @default("EPSG:4326")
+  bbox            String   // JSON [minLng, minLat, maxLng, maxLat]
+  centerLat       Float
+  centerLng       Float
+  // resolution
+  resolutionM     Float    @default(10) // meters per pixel
+  // processing
+  // status: scheduled | downloading | processing | tiling | caching | ready | archived | failed
+  status          String   @default("scheduled")
+  processingStage String   @default("pending") // pending | downloaded | rectified | tiled | cached | archived
+  // storage
+  rawStorageKey   String?  // raw downloaded data storage key
+  tiledStorageKey String?  // tiled data storage prefix
+  thumbnailKey    String?
+  sizeBytes       Int      @default(0)
+  // metadata
+  bands           String?  // JSON array of band info
+  metadata        String?  // JSON — full scene metadata
+  // scheduling
+  scheduledById   String?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tiles           RasterTile[]
+  schedule        IngestionSchedule?
+
+  @@index([satellite])
+  @@index([status])
+  @@index([acquisitionDate])
+  @@index([centerLat, centerLng])
+  @@index([cloudCover])
+}
+
+model RasterTile {
+  id              String   @id @default(cuid())
+  sceneId         String
+  z               Int      // zoom level
+  x               Int      // tile column (XYZ scheme)
+  y               Int      // tile row (XYZ scheme)
+  quadkey         String   // Bing quadkey for spatial indexing
+  // storage
+  storageKey      String   // object storage key
+  sizeBytes       Int      @default(0)
+  contentType     String   @default("image/png")
+  // cache
+  // cacheStatus: cached | stale | evicted | pending
+  cacheStatus     String   @default("pending")
+  cachedAt        DateTime?
+  expiresAt       DateTime?
+  accessCount     Int      @default(0)
+  lastAccessedAt  DateTime?
+  // tile metadata
+  bands           String?  // JSON — which bands are in this tile
+  checksum        String?  // SHA-256 for integrity
+  createdAt       DateTime @default(now())
+
+  scene           SatelliteScene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneId, z, x, y])
+  @@index([sceneId, z])
+  @@index([cacheStatus])
+  @@index([quadkey])
+  @@index([z, x, y])
+}
+
+model IngestionSchedule {
+  id              String   @id @default(cuid())
+  name            String
+  satellite       String   // sentinel2 | landsat8
+  // area of interest
+  bbox            String   // JSON [minLng, minLat, maxLng, maxLat]
+  centerLat       Float
+  centerLng       Float
+  // schedule
+  // frequency: daily | weekly | monthly | manual
+  frequency       String   @default("weekly")
+  cronExpression  String?  // e.g. "0 6 * * 1" = every Monday 6AM
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  // filters
+  maxCloudCover   Float    @default(20) // max cloud cover %
+  minResolutionM  Float    @default(10)
+  bands           String?  // JSON — requested bands
+  // status
+  isActive        Boolean  @default(true)
+  createdById     String?
+  // linked scene (last ingested)
+  lastSceneId     String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lastScene       SatelliteScene? @relation(fields: [lastSceneId], references: [id], onDelete: SetNull)
+
+  @@index([satellite])
+  @@index([isActive])
+  @@index([nextRunAt])
+}
+
+model TileCacheStats {
+  id              String   @id @default(cuid())
+  // aggregate cache statistics (updated periodically)
+  totalTiles      Int      @default(0)
+  cachedTiles     Int      @default(0)
+  staleTiles      Int      @default(0)
+  evictedTiles    Int      @default(0)
+  totalCacheBytes Int      @default(0)
+  hitRate         Float    @default(0) // 0.0-1.0
+  missRate        Float    @default(0)
+  // eviction policy
+  maxCacheSizeGb  Float    @default(10) // max cache size in GB
+  evictionPolicy  String   @default("lru") // lru | lfu | fifo
+  lastEvictionAt  DateTime?
+  computedAt      DateTime @default(now())
+
+  @@index([computedAt])
+}

@@ -1986,6 +1986,160 @@ async function seedNotificationData() {
   const subCount = await prisma.notificationSubscription.count();
   const gfCount = await prisma.geofenceSubscription.count();
   console.log(`[seed] Seeded ${notifCount} notifications, ${channelCount} channels, ${subCount} subscriptions, ${gfCount} geofences.`);
+
+  console.log("[seed] Seeding M12 satellite ingestion data...");
+  await seedSatelliteData();
+}
+
+// ---------------------------------------------------------------------------
+// M12 — Satellite Ingestion seed data
+// ---------------------------------------------------------------------------
+
+async function seedSatelliteData() {
+  const now = new Date();
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  // Create ingestion schedules
+  const schedules = [
+    { name: "Prestea Mining Belt — Sentinel-2 Weekly", satellite: "sentinel2", bbox: [-2.3, 5.2, -1.8, 5.6], frequency: "weekly", maxCloudCover: 20, bands: ["B02","B03","B04","B08","B11","B12"] },
+    { name: "Atewa Forest — Landsat-8 Biweekly", satellite: "landsat8", bbox: [-0.7, 6.0, -0.4, 6.3], frequency: "weekly", maxCloudCover: 15, bands: ["B2","B3","B4","B5","B6","B7"] },
+    { name: "Pra River Basin — Sentinel-2 Daily", satellite: "sentinel2", bbox: [-2.2, 5.1, -1.7, 5.9], frequency: "daily", maxCloudCover: 30, bands: ["B02","B03","B04","B08"] },
+    { name: "Tarkwa Gold Belt — Sentinel-1 SAR", satellite: "sentinel1", bbox: [-2.2, 5.1, -1.8, 5.5], frequency: "weekly", maxCloudCover: 100, bands: ["VV","VH"] },
+  ];
+
+  for (const s of schedules) {
+    const [minLng, minLat, maxLng, maxLat] = s.bbox;
+    await prisma.ingestionSchedule.create({
+      data: {
+        name: s.name,
+        satellite: s.satellite,
+        bbox: JSON.stringify(s.bbox),
+        centerLat: (minLat + maxLat) / 2,
+        centerLng: (minLng + maxLng) / 2,
+        frequency: s.frequency,
+        cronExpression: s.frequency === "daily" ? "0 6 * * *" : s.frequency === "weekly" ? "0 6 * * 1" : null,
+        nextRunAt: new Date(now.getTime() + (s.frequency === "daily" ? 1 : 7) * 24 * 60 * 60 * 1000),
+        maxCloudCover: s.maxCloudCover,
+        bands: JSON.stringify(s.bands),
+        isActive: true,
+      },
+    }).catch(() => {});
+  }
+
+  // Create satellite scenes with tiles
+  const sceneData = [
+    { satellite: "sentinel2", acquisitionDate: daysAgo(15), cloudCover: 8, bbox: [-2.3, 5.2, -1.8, 5.6], resolutionM: 10, status: "ready", stage: "ready" },
+    { satellite: "sentinel2", acquisitionDate: daysAgo(22), cloudCover: 12, bbox: [-2.3, 5.2, -1.8, 5.6], resolutionM: 10, status: "ready", stage: "ready" },
+    { satellite: "sentinel2", acquisitionDate: daysAgo(7), cloudCover: 5, bbox: [-2.2, 5.1, -1.7, 5.9], resolutionM: 10, status: "ready", stage: "ready" },
+    { satellite: "landsat8", acquisitionDate: daysAgo(30), cloudCover: 15, bbox: [-0.7, 6.0, -0.4, 6.3], resolutionM: 30, status: "ready", stage: "ready" },
+    { satellite: "landsat8", acquisitionDate: daysAgo(60), cloudCover: 20, bbox: [-0.7, 6.0, -0.4, 6.3], resolutionM: 30, status: "archived", stage: "archived" },
+    { satellite: "sentinel1", acquisitionDate: daysAgo(10), cloudCover: 0, bbox: [-2.2, 5.1, -1.8, 5.5], resolutionM: 10, status: "ready", stage: "ready" },
+    { satellite: "sentinel2", acquisitionDate: daysAgo(90), cloudCover: 18, bbox: [-2.3, 5.2, -1.8, 5.6], resolutionM: 10, status: "archived", stage: "archived" },
+    { satellite: "sentinel2", acquisitionDate: daysAgo(180), cloudCover: 25, bbox: [-2.3, 5.2, -1.8, 5.6], resolutionM: 10, status: "archived", stage: "archived" },
+    { satellite: "landsat8", acquisitionDate: daysAgo(120), cloudCover: 10, bbox: [-0.7, 6.0, -0.4, 6.3], resolutionM: 30, status: "archived", stage: "archived" },
+    { satellite: "sentinel2", acquisitionDate: daysAgo(1), cloudCover: 3, bbox: [-2.2, 5.1, -1.7, 5.9], resolutionM: 10, status: "processing", stage: "tiling" },
+  ];
+
+  let sceneCount = 0;
+  let tileCount = 0;
+
+  for (const sd of sceneData) {
+    const [minLng, minLat, maxLng, maxLat] = sd.bbox;
+    const centerLat = (minLat + maxLat) / 2;
+    const centerLng = (minLng + maxLng) / 2;
+    const sceneIdStr = `${sd.satellite.toUpperCase()}_${sd.acquisitionDate.toISOString().slice(0,10).replace(/-/g,"")}_${centerLat.toFixed(2)}_${centerLng.toFixed(2)}`;
+    const hash = createHash("sha256").update(sceneIdStr).digest("hex").slice(0, 8);
+    const officialSceneId = `${sd.satellite}_${hash}_${sd.acquisitionDate.toISOString().slice(0,10)}`;
+
+    const scene = await prisma.satelliteScene.create({
+      data: {
+        sceneId: officialSceneId,
+        satellite: sd.satellite,
+        sensor: sd.satellite === "sentinel1" ? "SAR" : "MSI",
+        acquisitionDate: sd.acquisitionDate,
+        cloudCover: sd.cloudCover,
+        sunAzimuth: 140 + Math.random() * 40,
+        sunElevation: 45 + Math.random() * 20,
+        bbox: JSON.stringify(sd.bbox),
+        centerLat,
+        centerLng,
+        resolutionM: sd.resolutionM,
+        status: sd.status,
+        processingStage: sd.stage,
+        rawStorageKey: sd.status !== "processing" ? `satellite/raw/${officialSceneId}` : null,
+        tiledStorageKey: sd.status === "ready" ? `satellite/tiles/${officialSceneId}` : null,
+        thumbnailKey: sd.status !== "processing" ? `satellite/thumbnails/${officialSceneId}.png` : null,
+        sizeBytes: Math.floor(50 + Math.random() * 200) * 1024 * 1024,
+        bands: JSON.stringify(sd.satellite === "sentinel1" ? ["VV","VH"] : sd.satellite === "landsat8" ? ["B2","B3","B4","B5","B6","B7"] : ["B02","B03","B04","B08","B11","B12"]),
+        metadata: JSON.stringify({ satellite: sd.satellite === "sentinel2" ? "Sentinel-2" : sd.satellite === "landsat8" ? "Landsat-8" : "Sentinel-1", resolutionM: sd.resolutionM }),
+        processedAt: sd.status === "ready" || sd.status === "archived" ? sd.acquisitionDate : null,
+      },
+    });
+    sceneCount++;
+
+    // Generate tiles for ready/archived scenes
+    if (sd.status === "ready" || sd.status === "archived") {
+      for (const z of [8, 10, 12, 14]) {
+        const n = Math.pow(2, z);
+        const minTileX = Math.floor(((minLng + 180) / 360) * n);
+        const maxTileX = Math.floor(((maxLng + 180) / 360) * n);
+        const maxTileY = Math.floor(((1 - Math.log(Math.tan(maxLat * Math.PI/180) + 1/Math.cos(maxLat * Math.PI/180)) / Math.PI) / 2) * n);
+        const minTileY = Math.floor(((1 - Math.log(Math.tan(minLat * Math.PI/180) + 1/Math.cos(minLat * Math.PI/180)) / Math.PI) / 2) * n);
+        const xRange = Math.min(maxTileX - minTileX + 1, 8);
+        const yRange = Math.min(maxTileY - minTileY + 1, 8);
+
+        for (let x = 0; x < xRange; x++) {
+          for (let y = 0; y < yRange; y++) {
+            const tileX = minTileX + x;
+            const tileY = minTileY + y;
+            let quadkey = "";
+            for (let i = z; i > 0; i--) {
+              let digit = 0;
+              const mask = 1 << (i - 1);
+              if ((tileX & mask) !== 0) digit += 1;
+              if ((tileY & mask) !== 0) digit += 2;
+              quadkey += digit.toString();
+            }
+            await prisma.rasterTile.create({
+              data: {
+                sceneId: scene.id,
+                z, x: tileX, y: tileY, quadkey,
+                storageKey: `satellite/tiles/${scene.id}/${z}/${tileX}/${tileY}.png`,
+                sizeBytes: Math.floor(10 + Math.random() * 30) * 1024,
+                contentType: "image/png",
+                cacheStatus: sd.status === "archived" ? "stale" : "cached",
+                cachedAt: sd.acquisitionDate,
+                expiresAt: new Date(sd.acquisitionDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+                accessCount: Math.floor(Math.random() * 50),
+                lastAccessedAt: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)),
+                bands: JSON.stringify(["B04","B03","B02"]),
+                checksum: createHash("sha256").update(`${scene.id}-${z}-${tileX}-${tileY}`).digest("hex"),
+              },
+            }).catch(() => {});
+            tileCount++;
+          }
+        }
+      }
+    }
+  }
+
+  // Update cache stats
+  const totalTiles = await prisma.rasterTile.count();
+  const cachedTiles = await prisma.rasterTile.count({ where: { cacheStatus: "cached" } });
+  const staleTiles = await prisma.rasterTile.count({ where: { cacheStatus: "stale" } });
+  const totalSize = await prisma.rasterTile.aggregate({ _sum: { sizeBytes: true } });
+  await prisma.tileCacheStats.create({
+    data: {
+      totalTiles, cachedTiles, staleTiles, evictedTiles: 0,
+      totalCacheBytes: totalSize._sum.sizeBytes ?? 0,
+      hitRate: totalTiles > 0 ? cachedTiles / totalTiles : 0,
+      missRate: totalTiles > 0 ? staleTiles / totalTiles : 0,
+      computedAt: new Date(),
+    },
+  }).catch(() => {});
+
+  const scheduleCount = await prisma.ingestionSchedule.count();
+  console.log(`[seed] Seeded ${sceneCount} satellite scenes, ${tileCount} raster tiles, ${scheduleCount} ingestion schedules.`);
 }
 
 main()

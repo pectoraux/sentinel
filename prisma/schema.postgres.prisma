@@ -1140,3 +1140,112 @@ model GeofenceSubscription {
   @@index([isActive])
   @@index([centerLat, centerLng])
 }
+
+model SatelliteScene {
+  id              String   @id @default(cuid())
+  sceneId         String   @unique
+  satellite       String
+  sensor          String
+  acquisitionDate DateTime
+  cloudCover      Float    @default(0)
+  sunAzimuth      Float?
+  sunElevation    Float?
+  crs             String   @default("EPSG:4326")
+  bbox            String
+  centerLat       Float
+  centerLng       Float
+  resolutionM     Float    @default(10)
+  status          String   @default("scheduled")
+  processingStage String   @default("pending")
+  rawStorageKey   String?
+  tiledStorageKey String?
+  thumbnailKey    String?
+  sizeBytes       Int      @default(0)
+  bands           String?
+  metadata        String?
+  scheduledById   String?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tiles           RasterTile[]
+  schedule        IngestionSchedule?
+
+  @@index([satellite])
+  @@index([status])
+  @@index([acquisitionDate])
+  @@index([centerLat, centerLng])
+  @@index([cloudCover])
+}
+
+model RasterTile {
+  id              String   @id @default(cuid())
+  sceneId         String
+  z               Int
+  x               Int
+  y               Int
+  quadkey         String
+  storageKey      String
+  sizeBytes       Int      @default(0)
+  contentType     String   @default("image/png")
+  cacheStatus     String   @default("pending")
+  cachedAt        DateTime?
+  expiresAt       DateTime?
+  accessCount     Int      @default(0)
+  lastAccessedAt  DateTime?
+  bands           String?
+  checksum        String?
+  createdAt       DateTime @default(now())
+
+  scene           SatelliteScene @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  @@unique([sceneId, z, x, y])
+  @@index([sceneId, z])
+  @@index([cacheStatus])
+  @@index([quadkey])
+  @@index([z, x, y])
+}
+
+model IngestionSchedule {
+  id              String   @id @default(cuid())
+  name            String
+  satellite       String
+  bbox            String
+  centerLat       Float
+  centerLng       Float
+  frequency       String   @default("weekly")
+  cronExpression  String?
+  nextRunAt       DateTime?
+  lastRunAt       DateTime?
+  maxCloudCover   Float    @default(20)
+  minResolutionM  Float    @default(10)
+  bands           String?
+  isActive        Boolean  @default(true)
+  createdById     String?
+  lastSceneId     String?  @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lastScene       SatelliteScene? @relation(fields: [lastSceneId], references: [id], onDelete: SetNull)
+
+  @@index([satellite])
+  @@index([isActive])
+  @@index([nextRunAt])
+}
+
+model TileCacheStats {
+  id              String   @id @default(cuid())
+  totalTiles      Int      @default(0)
+  cachedTiles     Int      @default(0)
+  staleTiles      Int      @default(0)
+  evictedTiles    Int      @default(0)
+  totalCacheBytes Int      @default(0)
+  hitRate         Float    @default(0)
+  missRate        Float    @default(0)
+  maxCacheSizeGb  Float    @default(10)
+  evictionPolicy  String   @default("lru")
+  lastEvictionAt  DateTime?
+  computedAt      DateTime @default(now())
+
+  @@index([computedAt])
+}
