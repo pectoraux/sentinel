@@ -440,3 +440,47 @@ Stage Summary:
 - Milestone 10 (Civil Trust Engine) is COMPLETE and browser-verified.
 - Delivered: Production trust system replacing reputation. 8-factor weighted trust computation: Accuracy (verified/total reports), Reliability (consistency over time), False reports (penalty), Evidence quality (from M9 aggregate), Contribution quality (corroboration support rate), Community impact (verifications + independent corroborations), Decay (90-day half-life — trust erodes with inactivity), Fraud resistance (automated detection of duplicate spam, false reports, coordinated manipulation, bot behavior). Composite score = weighted sum × decay multiplier × fraud multiplier.
 - The Civil Trust Engine integrates with ALL prior milestones: M2 Trust Profiles (backward compatible), M8 Intelligence Events (accuracy tracking), M9 Evidence Weights (evidence quality), M9 Corroboration (contribution quality), M6 Knowledge Graph (independence checking for fraud detection).
+
+---
+Task ID: M11
+Agent: orchestrator
+Task: Milestone 11 — Notification Platform
+
+Work Log:
+- Extended Prisma schema (both SQLite + PostgreSQL) with 5 new models: NotificationChannel (push/email/sms/in_app with address + verified + enabled + preferences), NotificationSubscription (geofence/interest/event_type/entity with channels + minPriority + digestMode), Notification (type/title/body/priority/channels/data/isRead/deliveryStatus/source/matchedGeofence), NotificationDigest (period/startTime/endTime/notificationIds/count/status), GeofenceSubscription (name/geojson/centerLat/centerLng/radiusM/channels/minPriority/eventTypes).
+- Built notification domain (src/modules/notifications/domain/notification-types.ts):
+  - 4 channel types: push, email, sms, in_app — each with icon, color, metadata
+  - 4 priority levels: 0=Low, 1=Normal, 2=High, 3=Critical — each with color + weight
+  - 4 digest modes: none (instant), hourly, daily, weekly — each with intervalMs
+  - 4 subscription types: geofence, interest, event_type, entity — each with description
+  - Geofence matching: pointInCircularGeofence (Haversine distance ≤ radiusM) + pointInPolygonGeofence (ray-casting)
+  - Interest matching: 12 interest topics (water_contamination, illegal_mining, deforestation, pollution, land_degradation, wildlife_crime, evidence_verified, corroboration_received, trust_change, fraud_alert, community_update, system_maintenance) with matchInterest() that maps event types to topics
+- Built NotificationService (src/modules/notifications/application/services/notification.service.ts):
+  - send(): create notification to a user via specified channels with delivery status tracking
+  - broadcast(): broadcast to all matching users — checks geofence subscriptions (circular + polygon), interest subscriptions (with digest deferral), event_type subscriptions, entity subscriptions
+  - listForUser(): inbox with unread count
+  - markAsRead(), markAllAsRead()
+  - subscribe(), unsubscribe(), listSubscriptions()
+  - createGeofence(), listGeofences()
+  - compileDigests(): batch unread digest-mode notifications into NotificationDigest records + send digest notification
+  - registerChannel(), listChannels()
+  - summary(): aggregate metrics (total, unread, byType, byPriority, channels, subscriptions, geofences, digests, recent)
+- Built 7 API routes: notifications (GET inbox), notifications/[id] (PATCH mark as read), notifications/summary (GET public), notifications/subscribe (GET list, POST create), notifications/digest (POST compile), notifications/geofences (GET list, POST create).
+- Seed: 8 notifications across all types (intelligence_event, evidence_verified, corroboration, trust_change, fraud_alert, community_update, system, digest) with all 4 priority levels (2 low, 3 normal, 2 high, 1 critical). 15 channels (6 in_app, 6 email, 3 push). 15 interest subscriptions (3 per user × 5 users, one with daily digest). 3 geofences (Prestea Mining Belt 10km, Pra River Basin 15km, Atewa Forest). 1 sample digest.
+- UI: Built NotificationDashboard component with:
+  - 8 KPIs (total, unread, channels, subscriptions, geofences, digests, critical, high priority)
+  - Notification Inbox — list of 8 notifications with priority dots, type colors, unread indicators, channel icons, geofence match, relative timestamps
+  - Channels panel — 4 channel types with counts
+  - Subscriptions panel — 4 subscription types with counts
+  - Geofences + Digests summary card
+  - Priority Distribution — bar chart (critical/high/normal/low) + total/unread/critical stats
+  - Platform Features — 8 feature cards (Push, Email, SMS, In-App, Geofenced Subscriptions, Interest Subscriptions, Digest Mode, Priority Notifications)
+- Updated DashboardTabs to 11 tabs (Notifications default, Civil Trust, Corroboration, Community Intelligence, Evidence, Knowledge Graph, Temporal, Digital Twin, Geospatial, Identity & Trust, Platform Foundation).
+- Fixed: missing getNotificationService export from notifications module barrel.
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification: Notifications tab (default) renders all 7 sections. 11 tabs switch correctly. Summary: 8 notifications, 4 unread, 15 channels, 15 subscriptions, 3 geofences, all 4 priority levels. No errors.
+
+Stage Summary:
+- Milestone 11 (Notification Platform) is COMPLETE and browser-verified.
+- Delivered: Multi-channel notification system (Push, Email, SMS, In-app) with geofenced subscriptions (circular + polygon matching using M3 spatial algorithms), interest subscriptions (12 topics), digest mode (hourly/daily/weekly), and 4-level priority notifications (low → critical). The broadcast system automatically matches new events to subscribers via geofence proximity, interest topic, event type, or entity ID. Digest mode defers notifications for batched delivery.
+- The Notification Platform integrates with: M3 Geospatial (geofence point-in-polygon matching), M8 Community Intelligence (event triggers), M9 Evidence Platform (evidence_verified + corroboration notifications), M10 Civil Trust (trust_change notifications), M6 Knowledge Graph (entity subscriptions).

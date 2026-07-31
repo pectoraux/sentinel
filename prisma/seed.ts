@@ -1865,6 +1865,127 @@ async function seedTrustData() {
   }
 
   console.log(`[seed] Seeded ${count} trust factor records with 8-factor computation, 1 fraud flag, 3 decay logs.`);
+
+  console.log("[seed] Seeding M11 notification data...");
+  await seedNotificationData();
+}
+
+// ---------------------------------------------------------------------------
+// M11 — Notification seed data
+// ---------------------------------------------------------------------------
+
+async function seedNotificationData() {
+  const users = await prisma.user.findMany({ select: { id: true, email: true, name: true } });
+  if (users.length === 0) return;
+
+  // Register channels for each user
+  for (const user of users) {
+    await prisma.notificationChannel.create({
+      data: { userId: user.id, type: "in_app", address: null, isVerified: true, isEnabled: true },
+    }).catch(() => {});
+    if (user.email) {
+      await prisma.notificationChannel.create({
+        data: { userId: user.id, type: "email", address: user.email, isVerified: true, isEnabled: true },
+      }).catch(() => {});
+    }
+    // Push channel for some users
+    if (users.indexOf(user) < 3) {
+      await prisma.notificationChannel.create({
+        data: { userId: user.id, type: "push", address: `device_token_${user.id.slice(0, 8)}`, isVerified: true, isEnabled: true },
+      }).catch(() => {});
+    }
+  }
+
+  // Create interest subscriptions
+  const interests = ["water_contamination", "illegal_mining", "deforestation", "evidence_verified", "corroboration_received"];
+  for (const user of users.slice(0, 5)) {
+    for (const interest of interests.slice(0, 3)) {
+      await prisma.notificationSubscription.create({
+        data: {
+          userId: user.id,
+          subscriptionType: "interest",
+          target: interest,
+          channels: JSON.stringify(["in_app", "email"]),
+          minPriority: 0,
+          digestMode: user === users[0] ? "daily" : "none",
+          isActive: true,
+        },
+      }).catch(() => {});
+    }
+  }
+
+  // Create geofences
+  for (const user of users.slice(0, 3)) {
+    await prisma.geofenceSubscription.create({
+      data: {
+        userId: user.id,
+        name: user === users[0] ? "Prestea Mining Belt" : user === users[1] ? "Pra River Basin" : "Atewa Forest",
+        centerLat: user === users[0] ? 5.43 : user === users[1] ? 5.28 : 6.17,
+        centerLng: user === users[0] ? -2.14 : user === users[1] ? -1.88 : -0.55,
+        radiusM: user === users[0] ? 10000 : 15000,
+        geojson: JSON.stringify({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [[[-2.2, 5.3], [-2.0, 5.3], [-2.0, 5.5], [-2.2, 5.5], [-2.2, 5.3]]] },
+        }),
+        channels: JSON.stringify(["push", "in_app"]),
+        minPriority: 1,
+        eventTypes: JSON.stringify(["intelligence_event", "evidence_upload"]),
+        isActive: true,
+      },
+    }).catch(() => {});
+  }
+
+  // Create sample notifications
+  const sampleNotifications = [
+    { userId: 0, type: "intelligence_event", title: "New Intelligence Event: Cyanide Spill", body: "A critical water contamination event was reported near Prestea.", priority: 3, source: "event_bus", channels: ["push", "in_app"] },
+    { userId: 0, type: "evidence_verified", title: "Your Evidence Was Verified", body: "Your drone photo 'Cyanide Spill — Drone Photo' has been verified by a reviewer.", priority: 1, source: "event_bus", channels: ["in_app"] },
+    { userId: 1, type: "corroboration", title: "New Support on Your Evidence", body: "Kofi Mensah supported your water sample lab report.", priority: 1, source: "event_bus", channels: ["in_app"] },
+    { userId: 1, type: "trust_change", title: "Trust Score Updated", body: "Your trust score increased to 72 (Verified tier).", priority: 1, source: "event_bus", channels: ["in_app"] },
+    { userId: 2, type: "intelligence_event", title: "Event in Your Geofence: Atewa Forest", body: "A deforestation event was detected within your Atewa Forest geofence.", priority: 2, source: "event_bus", matchedGeofence: "Atewa Forest", channels: ["push", "in_app"] },
+    { userId: 3, type: "fraud_alert", title: "Fraud Alert", body: "A duplicate spam pattern was detected in your area.", priority: 2, source: "event_bus", channels: ["in_app"] },
+    { userId: 4, type: "community_update", title: "Weekly Community Digest", body: "5 new intelligence events in your area this week.", priority: 0, source: "digest", channels: ["in_app"] },
+    { userId: 0, type: "system", title: "System Maintenance", body: "Scheduled maintenance window: Sunday 2-4 AM GMT.", priority: 0, source: "system", channels: ["in_app"] },
+  ];
+
+  for (const n of sampleNotifications) {
+    const user = users[n.userId]!;
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        type: n.type,
+        title: n.title,
+        body: n.body,
+        priority: n.priority,
+        channels: JSON.stringify(n.channels),
+        source: n.source,
+        matchedGeofence: (n as any).matchedGeofence ?? null,
+        isRead: Math.random() > 0.5,
+        deliveryStatus: JSON.stringify(n.channels.map((ch: string) => ({ channel: ch, status: "delivered", deliveredAt: new Date().toISOString() }))),
+        createdAt: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)),
+      },
+    }).catch(() => {});
+  }
+
+  // Create a sample digest
+  await prisma.notificationDigest.create({
+    data: {
+      userId: users[0]!.id,
+      period: "daily",
+      startTime: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      endTime: new Date(),
+      notificationIds: JSON.stringify(["sample1", "sample2", "sample3"]),
+      count: 3,
+      status: "sent",
+      sentAt: new Date(),
+      channels: JSON.stringify(["in_app", "email"]),
+    },
+  }).catch(() => {});
+
+  const notifCount = await prisma.notification.count();
+  const channelCount = await prisma.notificationChannel.count();
+  const subCount = await prisma.notificationSubscription.count();
+  const gfCount = await prisma.geofenceSubscription.count();
+  console.log(`[seed] Seeded ${notifCount} notifications, ${channelCount} channels, ${subCount} subscriptions, ${gfCount} geofences.`);
 }
 
 main()

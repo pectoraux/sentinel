@@ -1174,3 +1174,138 @@ model FraudFlag {
   @@index([status])
   @@index([severity])
 }
+
+// =============================================================================
+// MILESTONE 11 — Notification Platform
+// =============================================================================
+// Multi-channel notification system: Push, Email, SMS, In-app.
+// Supports geofenced subscriptions, interest subscriptions, digest mode,
+// and priority notifications.
+// =============================================================================
+
+model NotificationChannel {
+  id              String   @id @default(cuid())
+  userId          String
+  // type: push | email | sms | in_app
+  type            String
+  // address: device token (push), email address, phone number, or null for in_app
+  address         String?
+  // isVerified: whether the channel has been verified (email/SMS confirmation)
+  isVerified      Boolean  @default(false)
+  // isEnabled: user can disable a channel without deleting it
+  isEnabled       Boolean  @default(true)
+  // preferences: JSON — per-channel preferences (quiet hours, min priority, etc.)
+  preferences     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, type, address])
+  @@index([userId])
+  @@index([type])
+}
+
+model NotificationSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  // subscriptionType: geofence | interest | event_type | entity
+  subscriptionType String
+  // target: for geofence = GeoJSON polygon JSON; for interest = topic key;
+  //         for event_type = "intelligence.created" etc; for entity = entity ID
+  target          String
+  // channels: JSON array of channel types to notify via ["push","email","sms","in_app"]
+  channels        String   @default("[\"in_app\"]")
+  // minPriority: only notify for notifications >= this priority (0=low, 1=normal, 2=high, 3=critical)
+  minPriority     Int      @default(0)
+  // digestMode: none | hourly | daily | weekly
+  digestMode      String   @default("none")
+  // isActive
+  isActive        Boolean  @default(true)
+  // metadata: JSON — subscription-specific config (radius_m, topics, etc.)
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, subscriptionType, target])
+  @@index([userId])
+  @@index([subscriptionType])
+  @@index([isActive])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  // type: intelligence_event | evidence_upload | trust_change | corroboration | system | alert | digest
+  type            String
+  title           String
+  body            String
+  // priority: 0=low, 1=normal, 2=high, 3=critical
+  priority        Int      @default(1)
+  // channels: JSON array of channels this was sent via
+  channels        String   @default("[\"in_app\"]")
+  // data: JSON — payload (eventId, evidenceId, link, etc.)
+  data            String?
+  // read status
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  // delivery status per channel: JSON [{ channel, status, deliveredAt, error }]
+  deliveryStatus  String?
+  // source: what triggered this notification
+  source          String   @default("system") // system | event_bus | manual | digest
+  // geofence match (if applicable)
+  matchedGeofence String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([priority])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model NotificationDigest {
+  id              String   @id @default(cuid())
+  userId          String
+  // period: hourly | daily | weekly
+  period          String
+  // startTime / endTime: the time range this digest covers
+  startTime       DateTime
+  endTime         DateTime
+  // notificationIds: JSON array of notification IDs included in this digest
+  notificationIds String
+  // count: number of notifications in this digest
+  count           Int      @default(0)
+  // status: pending | sent | failed
+  status          String   @default("pending")
+  sentAt          DateTime?
+  // channels: JSON array of channels the digest was sent via
+  channels        String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([period])
+}
+
+model GeofenceSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  // geojson: GeoJSON Polygon defining the geofence boundary
+  geojson         String
+  // centerLat / centerLng: centroid for quick distance checks
+  centerLat       Float
+  centerLng       Float
+  // radiusM: radius in meters (for circular geofences, used with center)
+  radiusM         Float?
+  // channels: JSON array of channels
+  channels        String   @default("[\"push\",\"in_app\"]")
+  // minPriority: minimum priority to trigger
+  minPriority     Int      @default(1)
+  // eventTypes: JSON array of event types that trigger this geofence
+  eventTypes      String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([centerLat, centerLng])
+}

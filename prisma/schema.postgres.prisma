@@ -1042,3 +1042,101 @@ model FraudFlag {
   @@index([status])
   @@index([severity])
 }
+
+// =============================================================================
+// MILESTONE 11 — Notification Platform
+// =============================================================================
+
+model NotificationChannel {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String
+  address         String?
+  isVerified      Boolean  @default(false)
+  isEnabled       Boolean  @default(true)
+  preferences     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, type, address])
+  @@index([userId])
+  @@index([type])
+}
+
+model NotificationSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  subscriptionType String
+  target          String
+  channels        String   @default("[\"in_app\"]")
+  minPriority     Int      @default(0)
+  digestMode      String   @default("none")
+  isActive        Boolean  @default(true)
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, subscriptionType, target])
+  @@index([userId])
+  @@index([subscriptionType])
+  @@index([isActive])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String
+  title           String
+  body            String
+  priority        Int      @default(1)
+  channels        String   @default("[\"in_app\"]")
+  data            String?
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  deliveryStatus  String?
+  source          String   @default("system")
+  matchedGeofence String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([priority])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model NotificationDigest {
+  id              String   @id @default(cuid())
+  userId          String
+  period          String
+  startTime       DateTime
+  endTime         DateTime
+  notificationIds String
+  count           Int      @default(0)
+  status          String   @default("pending")
+  sentAt          DateTime?
+  channels        String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([period])
+}
+
+model GeofenceSubscription {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  geojson         String
+  centerLat       Float
+  centerLng       Float
+  radiusM         Float?
+  channels        String   @default("[\"push\",\"in_app\"]")
+  minPriority     Int      @default(1)
+  eventTypes      String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([centerLat, centerLng])
+}
