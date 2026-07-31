@@ -1249,3 +1249,51 @@ model TileCacheStats {
 
   @@index([computedAt])
 }
+
+model DetectionResult {
+  id              String   @id @default(cuid())
+  sceneId         String?
+  evidenceId      String?
+  imageUrl        String
+  type            String
+  detected        Boolean
+  confidence      Float    @default(0)
+  description     String?
+  boundingBoxes   String?
+  severity        String?
+  area            String?
+  model           String   @default("vlm-zai")
+  prompt          String?
+  processingMs    Int      @default(0)
+  rawResponse     String?
+  status          String   @default("completed")
+  error           String?
+  triggeredBy     String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([detected])
+  @@index([confidence])
+  @@index([sceneId])
+  @@index([evidenceId])
+  @@index([createdAt])
+}
+
+model DetectionBatch {
+  id              String   @id @default(cuid())
+  name            String
+  batchType       String   @default("scene_analysis")
+  targets         String
+  detectionTypes  String
+  resultCount     Int      @default(0)
+  detectedCount   Int      @default(0)
+  status          String   @default("pending")
+  startedAt       DateTime?
+  completedAt     DateTime?
+  error           String?
+  triggeredBy     String?
+  createdAt       DateTime @default(now())
+
+  @@index([status])
+  @@index([batchType])
+}

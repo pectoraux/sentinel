@@ -1446,3 +1446,71 @@ model TileCacheStats {
 
   @@index([computedAt])
 }
+
+// =============================================================================
+// MILESTONE 13 — Computer Vision Platform
+// =============================================================================
+// Real AI detection using VLM (Vision Language Model) via z-ai-web-dev-sdk.
+// Detects: excavation, roads, tailings, forest_loss, water_changes, buildings, equipment.
+// =============================================================================
+
+model DetectionResult {
+  id              String   @id @default(cuid())
+  // source: the image/scene that was analyzed
+  sceneId         String?  // link to SatelliteScene (optional)
+  evidenceId      String?  // link to Evidence (optional)
+  imageUrl        String   // URL or data URI of the analyzed image
+  // detection type
+  type            String   // excavation | roads | tailings | forest_loss | water_changes | buildings | equipment
+  // AI result
+  detected        Boolean  // whether the feature was detected
+  confidence      Float    @default(0) // 0.0-1.0
+  // structured output from VLM
+  description     String?  // AI-generated description of what was detected
+  boundingBoxes   String?  // JSON array of {x, y, width, height, label, confidence}
+  severity        String?  // low | medium | high | critical (for environmental damage assessment)
+  area            String?  // JSON: { areaHectares, percentage }
+  // model metadata
+  model           String   @default("vlm-zai") // which model performed the detection
+  prompt          String?  // the prompt used
+  processingMs    Int      @default(0) // processing time in ms
+  // raw VLM response (for audit)
+  rawResponse     String?  // full VLM response text
+  // status
+  status          String   @default("completed") // pending | processing | completed | failed
+  error           String?
+  // user/system
+  triggeredBy     String?  // user ID or "system" / "schedule"
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([detected])
+  @@index([confidence])
+  @@index([sceneId])
+  @@index([evidenceId])
+  @@index([createdAt])
+}
+
+model DetectionBatch {
+  id              String   @id @default(cuid())
+  name            String
+  // batchType: scene_analysis | evidence_analysis | change_detection | scheduled
+  batchType       String   @default("scene_analysis")
+  // targets: JSON array of image URLs or scene IDs
+  targets         String
+  // detection types to run
+  detectionTypes  String   // JSON array
+  // results
+  resultCount     Int      @default(0)
+  detectedCount   Int      @default(0)
+  // status: pending | processing | completed | failed
+  status          String   @default("pending")
+  startedAt       DateTime?
+  completedAt     DateTime?
+  error           String?
+  triggeredBy     String?
+  createdAt       DateTime @default(now())
+
+  @@index([status])
+  @@index([batchType])
+}
