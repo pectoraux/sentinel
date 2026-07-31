@@ -20,6 +20,19 @@ export {
 } from "./application/services/temporal.service";
 
 export {
+  KnowledgeGraphService,
+  getKnowledgeGraphService,
+} from "./application/services/knowledge-graph.service";
+export type { KGNode, KGEdge, KGGraph } from "./application/services/knowledge-graph.service";
+
+export {
+  RELATIONSHIP_TEMPLATES,
+  findTemplates,
+  templatesForType,
+} from "./domain/relationship-templates";
+export type { RelationshipTemplate } from "./domain/relationship-templates";
+
+export {
   ENTITY_TYPE_CATALOGUE,
   ENTITY_TYPES,
   RELATIONSHIP_TYPES,

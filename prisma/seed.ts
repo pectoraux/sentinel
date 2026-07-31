@@ -663,6 +663,23 @@ const TWIN_RELATIONSHIPS = [
   { from: "event-cyanide-spill-2024", to: "river-pra-main", type: "affects", strength: 1.0, metadata: { severity: "critical" } },
   { from: "event-cyanide-spill-2024", to: "community-prestea", type: "threatens", strength: 0.9, metadata: {} },
   { from: "event-forest-clearing-2024", to: "forest-tano-offin", type: "affects", strength: 0.9, metadata: {} },
+  // M6 — Knowledge Graph template relationships
+  // River → Community (supplies)
+  { from: "river-pra-main", to: "community-prestea", type: "supplies", strength: 0.9, metadata: { dependency_level: "primary", usage_type: "drinking,agriculture", distance_m: 300 } },
+  { from: "river-offin", to: "community-dunkwa", type: "supplies", strength: 0.85, metadata: { dependency_level: "primary", usage_type: "drinking,fishing", distance_m: 200 } },
+  // Forest → Protected Area (within) — Forest is part of a watershed
+  { from: "forest-atewa", to: "protected-atewa-sanctuary", type: "within", strength: 1.0, metadata: { protection_level: "Forest Reserve" } },
+  { from: "forest-tano-offin", to: "protected-pra-basin", type: "within", strength: 0.8, metadata: { protection_level: "Water Protection" } },
+  // Satellite Image → Event (detects)
+  { from: "imagery-prestea-2024", to: "event-cyanide-spill-2024", type: "monitors", strength: 0.9, metadata: { detection_method: "spectral_analysis", confidence: 0.92 } },
+  { from: "imagery-atewa-2022", to: "event-forest-clearing-2024", type: "monitors", strength: 0.8, metadata: { detection_method: "change_detection", confidence: 0.85 } },
+  // Additional mine → river
+  { from: "mine-dunkwa-alluvial", to: "river-offin", type: "affects", strength: 0.9, metadata: { impact_type: "channel_diversion", distance_m: 200 } },
+  { from: "mine-obuasi-illegal", to: "river-offin", type: "affects", strength: 0.8, metadata: { impact_type: "sedimentation", distance_m: 1200 } },
+  // Community → River (depends_on) — already have some, add more
+  { from: "community-obuasi", to: "river-offin", type: "depends_on", strength: 0.7, metadata: { dependency: "agriculture" } },
+  // Protected area → community (protects)
+  { from: "protected-pra-basin", to: "community-prestea", type: "near", strength: 0.6, metadata: { distance_m: 5000 } },
 ];
 
 async function seedTwinData() {
