@@ -181,6 +181,9 @@ async function main() {
 
   console.log("[seed] Seeding M25 developer platform data...");
   await seedDeveloperData().catch((e) => console.log("[seed] M25 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding M26 security hardening data...");
+  await seedSecurityData().catch((e) => console.log("[seed] M26 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -3724,6 +3727,376 @@ async function seedDeveloperData() {
   }
 
   console.log(`[seed] Seeded ${webhookCount} webhooks (${deliveryCount} deliveries), ${apiKeyCount} API keys, ${sdkCount} SDK releases, ${integrationCount} integrations.`);
+}
+
+// ---------------------------------------------------------------------------
+// M26 — Security Hardening seed data
+// ---------------------------------------------------------------------------
+
+async function seedSecurityData() {
+  const existing = await prisma.securityEvent.count();
+  if (existing > 0) {
+    console.log(`[seed] Security data already exists (${existing} events) — skipping.`);
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+  const now = new Date();
+  const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  let eventCount = 0;
+  let policyCount = 0;
+  let threatCount = 0;
+  let backupCount = 0;
+  let penTestCount = 0;
+  let secretCount = 0;
+  let drCount = 0;
+
+  // ===========================================================================
+  // SECURITY POLICIES — 10 (one per domain)
+  // ===========================================================================
+  const policies = [
+    { key: "policy-zero-trust", name: "Zero Trust Access Policy", domain: "zero_trust", description: "mTLS for all service-to-service communication. Device posture check before access. Least-privilege RBAC. Continuous authentication every 15 min.", config: { mTLS: true, devicePosture: true, continuousAuth: true, sessionTimeout: 900 }, complianceScore: 0.92, violationCount: 2 },
+    { key: "policy-encryption", name: "Encryption Policy", domain: "encryption", description: "AES-256-GCM at rest. TLS 1.3 in transit. Envelope encryption for PII. KMS-managed keys with 90-day rotation.", config: { atRest: "AES-256-GCM", inTransit: "TLS-1.3", keyManagement: "KMS", rotationDays: 90 }, complianceScore: 0.98, violationCount: 0 },
+    { key: "policy-rate-limiting", name: "Rate Limiting Policy", domain: "rate_limiting", description: "100 req/min per API key, 1000 req/min per IP, 10000 req/day default. Sliding window algorithm. 429 with Retry-After header.", config: { perKey: 100, perIp: 1000, perDay: 10000, algorithm: "sliding_window" }, complianceScore: 0.95, violationCount: 12 },
+    { key: "policy-waf", name: "WAF Rules Policy", domain: "waf", description: "OWASP Top 10 protection. SQL injection, XSS, CSRF, RCE, path traversal blocking. Bot detection. Geo-blocking for high-risk countries.", config: { owaspTop10: true, botDetection: true, geoBlock: ["CN", "RU"], mode: "enforce" }, complianceScore: 0.88, violationCount: 45 },
+    { key: "policy-secret-rotation", name: "Secret Rotation Policy", domain: "secret_rotation", description: "Automatic rotation: JWT 30d, DB password 60d, API keys 90d, encryption keys 90d, TLS certs 90d. Zero-downtime rotation.", config: { jwtDays: 30, dbDays: 60, apiKeyDays: 90, encryptionDays: 90, tlsDays: 90 }, complianceScore: 0.90, violationCount: 1 },
+    { key: "policy-pen-testing", name: "Penetration Testing Policy", domain: "pen_testing", description: "Quarterly internal pen tests. Annual external pen test by certified firm. Continuous automated vulnerability scanning.", config: { internalQuarterly: true, externalAnnual: true, automatedScanning: "continuous" }, complianceScore: 0.85, violationCount: 3 },
+    { key: "policy-threat-detection", name: "Threat Detection Policy", domain: "threat_detection", description: "SIEM with 24/7 monitoring. Anomaly detection via ML. Brute-force protection (5 attempts/15 min). IoC feed integration.", config: { siem: true, anomalyDetection: true, bruteForceThreshold: 5, iocFeeds: true }, complianceScore: 0.87, violationCount: 8 },
+    { key: "policy-backup", name: "Backup Policy", domain: "backup", description: "Daily incremental, weekly full. 30-day retention. AES-256 encrypted. Verified restore monthly. 3-2-1 backup strategy.", config: { incrementalDaily: true, fullWeekly: true, retentionDays: 30, encryption: "AES-256", strategy: "3-2-1" }, complianceScore: 0.93, violationCount: 0 },
+    { key: "policy-disaster-recovery", name: "Disaster Recovery Policy", domain: "disaster_recovery", description: "RPO: 60 min. RTO: 4 hours. Regional failover capability. DR drill quarterly. Multi-AZ deployment.", config: { rpoMinutes: 60, rtoMinutes: 240, regionalFailover: true, drillQuarterly: true }, complianceScore: 0.82, violationCount: 2 },
+    { key: "policy-audit", name: "Audit Log Policy", domain: "audit", description: "Immutable, tamper-evident audit log with hash chain. All security actions logged. 7-year retention. SOC 2 compliant.", config: { immutable: true, hashChain: true, retentionYears: 7, compliance: "SOC2" }, complianceScore: 0.96, violationCount: 0 },
+  ];
+
+  for (const p of policies) {
+    await prisma.securityPolicy.create({
+      data: {
+        key: p.key,
+        name: p.name,
+        domain: p.domain,
+        description: p.description,
+        config: JSON.stringify(p.config),
+        enforcementMode: "enforce",
+        isActive: true,
+        complianceScore: p.complianceScore,
+        violationCount: p.violationCount,
+        lastCheckedAt: hoursAgo(1),
+        lastViolatedAt: p.violationCount > 0 ? daysAgo(3) : null,
+      },
+    });
+    policyCount++;
+  }
+
+  // ===========================================================================
+  // SECURITY EVENTS — 8
+  // ===========================================================================
+  const events = [
+    { domain: "waf", type: "waf_blocked", severity: "high", status: "resolved", title: "SQL Injection Attempt Blocked", description: "WAF blocked SQL injection attempt on /api/v1/evidence. Payload: ' OR 1=1 --", sourceIp: "45.83.12.99", targetResource: "/api/v1/evidence", mitigatedAt: hoursAgo(5), mitigationNotes: "IP blocked automatically by WAF rule SQLI-001" },
+    { domain: "threat_detection", type: "brute_force_detected", severity: "critical", status: "active", title: "Brute Force Attack on Admin Login", description: "237 failed login attempts from IP 45.83.12.99 targeting admin@sentinel.africa in 15 minutes. Automatic IP block triggered.", sourceIp: "45.83.12.99", targetResource: "/api/v1/auth/signin", mitigatedAt: hoursAgo(2), mitigationNotes: "IP auto-blocked for 24 hours" },
+    { domain: "zero_trust", type: "device_posture_failed", severity: "medium", status: "resolved", title: "Device Posture Check Failed", description: "User device missing security update. Access limited to read-only mode.", sourceUserId: admin?.id, targetResource: "admin-panel" },
+    { domain: "rate_limiting", type: "rate_limit_exceeded", severity: "low", status: "resolved", title: "API Rate Limit Exceeded", description: "API key sk_live_a1b2... exceeded 100 req/min limit. 429 responses returned.", sourceIp: "197.231.45.10", targetResource: "/api/v1/evidence" },
+    { domain: "secret_rotation", type: "key_rotated", severity: "info", status: "resolved", title: "JWT Secret Rotated", description: "JWT signing secret rotated to version 12. Old secret valid for 24-hour grace period.", mitigatedAt: daysAgo(1) },
+    { domain: "encryption", type: "encryption_verified", severity: "info", status: "resolved", title: "Encryption Verification Passed", description: "Monthly encryption verification: all data at rest confirmed AES-256-GCM encrypted. All TLS connections using TLS 1.3." },
+    { domain: "backup", type: "backup_completed", severity: "info", status: "resolved", title: "Daily Backup Completed", description: "Incremental database backup completed. Size: 247MB. Encrypted. Checksum verified.", mitigatedAt: hoursAgo(6) },
+    { domain: "audit", type: "audit_log_tamper_check", severity: "info", status: "resolved", title: "Audit Log Integrity Verified", description: "Hash chain verification of 12,847 audit entries: all valid. No tampering detected." },
+  ];
+
+  for (const e of events) {
+    await prisma.securityEvent.create({
+      data: {
+        domain: e.domain,
+        type: e.type,
+        severity: e.severity,
+        status: e.status,
+        title: e.title,
+        description: e.description,
+        sourceIp: e.sourceIp,
+        sourceUserId: e.sourceUserId,
+        targetResource: e.targetResource,
+        mitigatedAt: e.mitigatedAt,
+        mitigatedById: e.mitigatedAt ? admin?.id : null,
+        mitigationNotes: e.mitigationNotes,
+        detectedAt: hoursAgo(Math.random() * 48),
+      },
+    });
+    eventCount++;
+  }
+
+  // ===========================================================================
+  // THREAT INDICATORS — 6
+  // ===========================================================================
+  const threats = [
+    { type: "brute_force", severity: "high", status: "blocked", title: "Brute Force — Admin Login", description: "237 failed login attempts in 15 min from 45.83.12.99", sourceIp: "45.83.12.99", sourceCountry: "RU", targetEndpoint: "/api/v1/auth/signin", targetUserId: admin?.id, detectionMethod: "siem", confidence: 0.95, blockedAt: hoursAgo(2), blockDuration: 86400 },
+    { type: "sql_injection", severity: "high", status: "blocked", title: "SQL Injection on Evidence API", description: "WAF blocked UNION SELECT injection attempt", sourceIp: "45.83.12.99", sourceCountry: "RU", targetEndpoint: "/api/v1/evidence", detectionMethod: "waf", confidence: 0.92, blockedAt: hoursAgo(5), blockDuration: 86400 },
+    { type: "credential_stuffing", severity: "critical", status: "active", title: "Credential Stuffing Attack", description: "Automated login attempts using 500+ leaked credentials from 3 IPs", sourceIp: "197.231.45.10", sourceCountry: "NG", targetEndpoint: "/api/v1/auth/signin", detectionMethod: "siem", confidence: 0.88, blockedAt: null },
+    { type: "bot", severity: "medium", status: "blocked", title: "Bot Scraping Evidence API", description: "Automated scraping bot making 2000+ req/min from distributed IPs", sourceIp: "185.220.101.1", sourceCountry: "DE", targetEndpoint: "/api/v1/evidence", detectionMethod: "anomaly", confidence: 0.78, blockedAt: hoursAgo(12), blockDuration: 3600 },
+    { type: "xss", severity: "high", status: "blocked", title: "XSS Attempt in Comment Field", description: "WAF blocked <script> tag injection in event comment", sourceIp: "102.129.45.2", sourceCountry: "US", targetEndpoint: "/api/v1/intelligence/events/comments", detectionMethod: "waf", confidence: 0.90, blockedAt: hoursAgo(18), blockDuration: 86400 },
+    { type: "ddos", severity: "critical", status: "resolved", title: "DDoS Attack Mitigated", description: "10,000 req/sec from botnet. Auto-scaling + rate limiting mitigated.", sourceIp: "multiple", sourceCountry: "multiple", targetEndpoint: "/", detectionMethod: "ids", confidence: 0.96, blockedAt: daysAgo(3), blockDuration: 7200 },
+  ];
+
+  for (const t of threats) {
+    await prisma.threatIndicator.create({
+      data: {
+        type: t.type,
+        severity: t.severity,
+        status: t.status,
+        title: t.title,
+        description: t.description,
+        sourceIp: t.sourceIp,
+        sourceCountry: t.sourceCountry,
+        targetEndpoint: t.targetEndpoint,
+        targetUserId: t.targetUserId,
+        detectionMethod: t.detectionMethod,
+        confidence: t.confidence,
+        blockedAt: t.blockedAt,
+        blockDuration: t.blockDuration,
+        detectedAt: hoursAgo(Math.random() * 72),
+      },
+    });
+    threatCount++;
+  }
+
+  // ===========================================================================
+  // BACKUPS — 6
+  // ===========================================================================
+  const backups = [
+    { key: "bkp-db-full-20240728", type: "full", target: "database", status: "verified", sizeBytes: 1200000000, compressedSizeBytes: 380000000, storageProvider: "s3", encrypted: true, retentionDays: 90, verificationStatus: "passed", completedAt: hoursAgo(6), durationMs: 240000 },
+    { key: "bkp-db-incr-20240729", type: "incremental", target: "database", status: "verified", sizeBytes: 45000000, compressedSizeBytes: 12000000, storageProvider: "s3", encrypted: true, retentionDays: 30, verificationStatus: "passed", completedAt: hoursAgo(6), durationMs: 45000 },
+    { key: "bkp-storage-full-20240728", type: "full", target: "storage", status: "verified", sizeBytes: 1900000000, compressedSizeBytes: 1400000000, storageProvider: "s3", encrypted: true, retentionDays: 90, verificationStatus: "passed", completedAt: hoursAgo(8), durationMs: 480000 },
+    { key: "bkp-config-snap-20240729", type: "snapshot", target: "config", status: "completed", sizeBytes: 2300000, compressedSizeBytes: 890000, storageProvider: "s3", encrypted: true, retentionDays: 365, verificationStatus: "pending", completedAt: hoursAgo(12), durationMs: 5000 },
+    { key: "bkp-db-incr-20240727", type: "incremental", target: "database", status: "expired", sizeBytes: 38000000, compressedSizeBytes: 11000000, storageProvider: "s3", encrypted: true, retentionDays: 30, verificationStatus: "passed", completedAt: daysAgo(2), durationMs: 42000 },
+    { key: "bkp-full-system-20240701", type: "full", target: "full_system", status: "verified", sizeBytes: 2000000000, compressedSizeBytes: 1500000000, storageProvider: "s3", encrypted: true, retentionDays: 365, verificationStatus: "passed", completedAt: daysAgo(28), durationMs: 1800000 },
+  ];
+
+  for (const b of backups) {
+    await prisma.backupRecord.create({
+      data: {
+        key: b.key,
+        type: b.type,
+        target: b.target,
+        status: b.status,
+        sizeBytes: b.sizeBytes,
+        compressedSizeBytes: b.compressedSizeBytes,
+        storageLocation: `s3://sentinel-backups/${b.target}/${b.key}`,
+        storageProvider: b.storageProvider,
+        encrypted: b.encrypted,
+        encryptionKeyId: `kms-key-${b.target}`,
+        checksum: `sha256:${Math.random().toString(36).slice(2, 18)}`,
+        retentionDays: b.retentionDays,
+        expiresAt: new Date(now.getTime() + b.retentionDays * 24 * 60 * 60 * 1000),
+        verifiedAt: b.verificationStatus === "passed" ? b.completedAt : null,
+        verifiedById: b.verificationStatus === "passed" ? admin?.id : null,
+        verificationStatus: b.verificationStatus,
+        scheduledAt: new Date(b.completedAt.getTime() - 60000),
+        startedAt: new Date(b.completedAt.getTime() - b.durationMs),
+        completedAt: b.completedAt,
+        durationMs: b.durationMs,
+      },
+    });
+    backupCount++;
+  }
+
+  // ===========================================================================
+  // PEN TEST REPORTS — 3
+  // ===========================================================================
+  const penTests = [
+    {
+      key: "pentest-2024q2-internal",
+      title: "Q2 2024 Internal Penetration Test",
+      description: "Quarterly internal penetration test covering all API endpoints, authentication, and data access controls.",
+      type: "internal",
+      scope: JSON.stringify(["REST API", "GraphQL", "Authentication", "RBAC", "Evidence Upload", "Admin Panel"]),
+      testDate: daysAgo(45),
+      testDuration: 8,
+      testerName: "Sentinel Security Team",
+      testerType: "internal",
+      criticalCount: 0,
+      highCount: 1,
+      mediumCount: 3,
+      lowCount: 5,
+      infoCount: 2,
+      totalFindings: 11,
+      executiveSummary: "Overall security posture is strong. 1 high-severity finding (rate limiting bypass on /api/v1/evidence) remediated. 3 medium findings in progress. No critical vulnerabilities found.",
+      remediationStatus: "in_progress",
+      remediatedCount: 7,
+      remediationDueAt: daysAgo(-15),
+    },
+    {
+      key: "pentest-2024q1-external",
+      title: "Q1 2024 External Penetration Test",
+      description: "Annual external penetration test by certified third-party security firm.",
+      type: "external",
+      scope: JSON.stringify(["External API", "Web Application", "Authentication", "Session Management", "Input Validation", "Cryptography"]),
+      testDate: daysAgo(120),
+      testDuration: 40,
+      testerName: "SecureAfrica Consulting Ltd.",
+      testerType: "external_firm",
+      criticalCount: 0,
+      highCount: 2,
+      mediumCount: 4,
+      lowCount: 6,
+      infoCount: 3,
+      totalFindings: 15,
+      executiveSummary: "External pen test by SecureAfrica. No critical vulnerabilities. 2 high-severity findings (XSS in comments, missing CSRF token) fully remediated. Platform meets OWASP Top 10 compliance.",
+      remediationStatus: "completed",
+      remediatedCount: 15,
+      remediationDueAt: daysAgo(60),
+    },
+    {
+      key: "pentest-2024-redteam",
+      title: "2024 Red Team Exercise",
+      description: "Adversarial red team simulation attempting to exfiltrate evidence data and escalate privileges.",
+      type: "red_team",
+      scope: JSON.stringify(["Full System", "Social Engineering", "Privilege Escalation", "Data Exfiltration", "Lateral Movement"]),
+      testDate: daysAgo(90),
+      testDuration: 80,
+      testerName: "Red Team Unit",
+      testerType: "internal",
+      criticalCount: 1,
+      highCount: 2,
+      mediumCount: 3,
+      lowCount: 2,
+      infoCount: 1,
+      totalFindings: 9,
+      executiveSummary: "Red team achieved limited access via phishing but was detected by anomaly detection before data exfiltration. 1 critical finding (phishing-resistant MFA not enforced for admins) remediated. Detection capabilities performed well.",
+      remediationStatus: "completed",
+      remediatedCount: 9,
+      remediationDueAt: daysAgo(30),
+    },
+  ];
+
+  for (const p of penTests) {
+    await prisma.penTestReport.create({
+      data: {
+        key: p.key,
+        title: p.title,
+        description: p.description,
+        type: p.type,
+        scope: p.scope,
+        testDate: p.testDate,
+        testDuration: p.testDuration,
+        testerName: p.testerName,
+        testerType: p.testerType,
+        criticalCount: p.criticalCount,
+        highCount: p.highCount,
+        mediumCount: p.mediumCount,
+        lowCount: p.lowCount,
+        infoCount: p.infoCount,
+        totalFindings: p.totalFindings,
+        executiveSummary: p.executiveSummary,
+        remediationStatus: p.remediationStatus,
+        remediatedCount: p.remediatedCount,
+        remediationDueAt: p.remediationDueAt,
+      },
+    });
+    penTestCount++;
+  }
+
+  // ===========================================================================
+  // SECRET ROTATIONS — 7
+  // ===========================================================================
+  const secrets = [
+    { key: "secret-jwt", secretType: "jwt_secret", secretName: "NextAuth JWT Secret", description: "JWT signing secret for NextAuth.js", rotationStatus: "completed", rotationIntervalDays: 30, lastRotatedAt: daysAgo(1), nextRotationAt: daysAgo(-29), currentVersion: 12, previousVersion: 11, verificationStatus: "passed" },
+    { key: "secret-db-password", secretType: "database_password", secretName: "Database Password", description: "Primary database connection password", rotationStatus: "completed", rotationIntervalDays: 60, lastRotatedAt: daysAgo(15), nextRotationAt: daysAgo(-45), currentVersion: 8, previousVersion: 7, verificationStatus: "passed" },
+    { key: "secret-encryption-key", secretType: "encryption_key", secretName: "AES-256 Encryption Key", description: "KMS-managed master encryption key", rotationStatus: "completed", rotationIntervalDays: 90, lastRotatedAt: daysAgo(20), nextRotationAt: daysAgo(-70), currentVersion: 5, previousVersion: 4, verificationStatus: "passed" },
+    { key: "secret-api-key", secretType: "api_key", secretName: "Platform API Key", description: "Internal platform API key", rotationStatus: "scheduled", rotationIntervalDays: 90, lastRotatedAt: daysAgo(85), nextRotationAt: daysAgo(-5), currentVersion: 4, previousVersion: 3, verificationStatus: "pending" },
+    { key: "secret-tls-cert", secretType: "tls_cert", secretName: "TLS Certificate", description: "Let's Encrypt TLS certificate", rotationStatus: "completed", rotationIntervalDays: 90, lastRotatedAt: daysAgo(30), nextRotationAt: daysAgo(-60), currentVersion: 8, previousVersion: 7, verificationStatus: "passed" },
+    { key: "secret-oauth", secretType: "oauth_secret", secretName: "Google OAuth Secret", description: "Google OAuth client secret", rotationStatus: "scheduled", rotationIntervalDays: 365, lastRotatedAt: daysAgo(300), nextRotationAt: daysAgo(-65), currentVersion: 2, previousVersion: 1, verificationStatus: "passed" },
+    { key: "secret-webhook", secretType: "webhook_secret", secretName: "Webhook Signing Secret", description: "HMAC webhook signing secret", rotationStatus: "completed", rotationIntervalDays: 180, lastRotatedAt: daysAgo(45), nextRotationAt: daysAgo(-135), currentVersion: 3, previousVersion: 2, verificationStatus: "passed" },
+  ];
+
+  for (const s of secrets) {
+    await prisma.secretRotation.create({
+      data: {
+        key: s.key,
+        secretType: s.secretType,
+        secretName: s.secretName,
+        description: s.description,
+        rotationStatus: s.rotationStatus,
+        rotationIntervalDays: s.rotationIntervalDays,
+        lastRotatedAt: s.lastRotatedAt,
+        nextRotationAt: s.nextRotationAt,
+        rotatedById: s.rotationStatus === "completed" ? admin?.id : null,
+        currentVersion: s.currentVersion,
+        previousVersion: s.previousVersion,
+        verifiedAt: s.verificationStatus === "passed" ? s.lastRotatedAt : null,
+        verificationStatus: s.verificationStatus,
+      },
+    });
+    secretCount++;
+  }
+
+  // ===========================================================================
+  // DR PLANS — 3
+  // ===========================================================================
+  const drPlans = [
+    {
+      key: "dr-database-failover",
+      name: "Database Failover Plan",
+      description: "Automatic database failover to standby replica in case of primary failure.",
+      type: "failover",
+      rpoMinutes: 60,
+      rtoMinutes: 15,
+      lastTestedAt: daysAgo(30),
+      lastTestStatus: "passed",
+      lastTestDurationMin: 12,
+      readinessScore: 0.92,
+      readinessStatus: "ready",
+      steps: JSON.stringify(["Detect primary failure", "Promote standby replica", "Update DNS records", "Verify application connectivity", "Resume normal operations"]),
+    },
+    {
+      key: "dr-full-restore",
+      name: "Full System Restore Plan",
+      description: "Complete system restore from encrypted backups in case of catastrophic failure.",
+      type: "full_system",
+      rpoMinutes: 60,
+      rtoMinutes: 240,
+      lastTestedAt: daysAgo(75),
+      lastTestStatus: "partial",
+      lastTestDurationMin: 210,
+      readinessScore: 0.75,
+      readinessStatus: "degraded",
+      steps: JSON.stringify(["Provision new infrastructure", "Restore database from backup", "Restore object storage", "Restore configuration", "Verify data integrity", "Update DNS", "Resume operations"]),
+    },
+    {
+      key: "dr-regional-failover",
+      name: "Regional Failover Plan",
+      description: "Failover to secondary region in case of regional outage.",
+      type: "regional",
+      rpoMinutes: 60,
+      rtoMinutes: 480,
+      lastTestedAt: daysAgo(120),
+      lastTestStatus: "failed",
+      lastTestDurationMin: 600,
+      readinessScore: 0.45,
+      readinessStatus: "not_ready",
+      steps: JSON.stringify(["Detect regional outage", "Activate secondary region", "Sync pending data", "Update global DNS", "Verify all services", "Resume operations"]),
+    },
+  ];
+
+  for (const p of drPlans) {
+    await prisma.disasterRecoveryPlan.create({
+      data: {
+        key: p.key,
+        name: p.name,
+        description: p.description,
+        type: p.type,
+        rpoMinutes: p.rpoMinutes,
+        rtoMinutes: p.rtoMinutes,
+        lastTestedAt: p.lastTestedAt,
+        lastTestStatus: p.lastTestStatus,
+        lastTestDurationMin: p.lastTestDurationMin,
+        readinessScore: p.readinessScore,
+        readinessStatus: p.readinessStatus,
+        steps: p.steps,
+        isActive: true,
+      },
+    });
+    drCount++;
+  }
+
+  console.log(`[seed] Seeded ${policyCount} policies, ${eventCount} events, ${threatCount} threats, ${backupCount} backups, ${penTestCount} pen tests, ${secretCount} secret rotations, ${drCount} DR plans.`);
 }
 
 main()

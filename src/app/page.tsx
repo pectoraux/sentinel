@@ -63,6 +63,7 @@ import { GovernmentDashboard } from "@/components/sentinel/government/government
 import { SimulationDashboard } from "@/components/sentinel/simulation/simulation-dashboard";
 import { AnalyticsDashboard } from "@/components/sentinel/analytics/analytics-dashboard";
 import { DeveloperDashboard } from "@/components/sentinel/developer/developer-dashboard";
+import { SecurityDashboard } from "@/components/sentinel/security/security-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
@@ -83,6 +84,7 @@ import { getGovernmentService } from "@/modules/government";
 import { getSimulationService } from "@/modules/simulation";
 import { getAnalyticsService } from "@/modules/analytics";
 import { getDeveloperService } from "@/modules/developer";
+import { getSecurityService } from "@/modules/security";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -123,6 +125,7 @@ export default async function DashboardPage() {
     simulationSummary,
     analyticsSummary,
     developerSummary,
+    securitySummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -157,6 +160,7 @@ export default async function DashboardPage() {
     getSimulationService().summary(),
     getAnalyticsService().summary(),
     getDeveloperService().summary(),
+    getSecurityService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -238,7 +242,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M25 · Developer Platform
+                  M26 · Security Hardening
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -267,13 +271,13 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Developer Platform
+                Security Hardening
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                REST API with 50+ endpoints, GraphQL for flexible Digital Twin queries,
-                webhooks for event-driven integrations (19 event types), official SDKs
-                in 6 languages, interactive documentation, and 8 third-party integrations
-                (Slack, Teams, ArcGIS, Grafana, Zapier, and more).
+                Zero Trust architecture with 10 security domains: encryption (AES-256 + TLS 1.3),
+                rate limiting, WAF (OWASP Top 10), secret rotation, penetration testing,
+                threat detection (SIEM + IDS), encrypted backups, and disaster recovery with
+                RPO/RTO tracking. Overall security score computed from domain compliance.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -288,7 +292,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M25: Developer Platform (first child = first tab, default) === */}
+          {/* === M26: Security Hardening (first child = first tab, default) === */}
+          <SecurityDashboard initialSummary={securitySummary} />
+
+          {/* === M25: Developer Platform (second child = second tab) === */}
           <DeveloperDashboard initialSummary={developerSummary} />
 
           {/* === M24: Analytics Platform (second child = second tab) === */}
@@ -661,7 +668,12 @@ export default async function DashboardPage() {
                     "M25: Webhooks (19 Events) · HMAC-SHA256 Signing",
                     "M25: SDK (JS · Python · Go · Java · PHP · Ruby)",
                     "M25: 8 Integrations (Slack · ArcGIS · Grafana · Zapier)",
-                    "M26: Production Launch (next)",
+                    "M26: Security Hardening (10 Domains)",
+                    "M26: Zero Trust · Encryption (AES-256 + TLS 1.3)",
+                    "M26: Rate Limiting · WAF (OWASP Top 10)",
+                    "M26: Secret Rotation · Pen Testing · Threat Detection",
+                    "M26: Encrypted Backups · Disaster Recovery (RPO/RTO)",
+                    "M27: Production Launch (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -680,12 +692,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M25 — Developer Platform</span>
+            <span>Sentinel Platform · M26 — Security Hardening</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/security/summary" className="hover:text-foreground transition-colors">Security</Link>
             <Link href="/api/v1/dev/summary" className="hover:text-foreground transition-colors">Dev</Link>
             <Link href="/api/v1/analytics/summary" className="hover:text-foreground transition-colors">Analytics</Link>
             <Link href="/api/v1/simulations/summary" className="hover:text-foreground transition-colors">Sim</Link>

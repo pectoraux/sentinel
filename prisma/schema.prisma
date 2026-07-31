@@ -2776,3 +2776,258 @@ model ApiIntegration {
   @@index([isActive])
   @@index([isOfficial])
 }
+
+// =============================================================================
+// MILESTONE 26 — Security Hardening
+// =============================================================================
+// Comprehensive security platform covering 10 domains:
+//   1. Zero Trust       — never trust, always verify (mTLS, device posture)
+//   2. Encryption       — at rest (AES-256) + in transit (TLS 1.3)
+//   3. Rate Limiting    — per-API-key, per-IP, per-user throttling
+//   4. WAF              — Web Application Firewall (OWASP Top 10 protection)
+//   5. Secret Rotation  — automatic key/secret rotation with audit trail
+//   6. Pen Testing      — scheduled + ad-hoc penetration test reports
+//   7. Threat Detection — intrusion detection, anomaly detection, SIEM
+//   8. Backups          — automated encrypted backups with retention
+//   9. Disaster Recovery — RPO/RTO tracking, failover readiness
+//  10. Audit            — immutable security audit log (tamper-evident)
+// =============================================================================
+
+model SecurityEvent {
+  id              String   @id @default(cuid())
+  // domain: zero_trust | encryption | rate_limiting | waf | secret_rotation | pen_testing | threat_detection | backup | disaster_recovery | audit
+  domain          String
+  // type: specific event type (e.g. "failed_login", "waf_blocked", "key_rotated")
+  type            String
+  // severity: info | low | medium | high | critical
+  severity        String   @default("info")
+  // status: active | acknowledged | resolved | false_positive
+  status          String   @default("active")
+  title           String
+  description     String
+  // source
+  sourceIp        String?
+  sourceUserId    String?
+  sourceService   String?
+  // target
+  targetResource  String?  // e.g. "/api/v1/evidence", "database", "admin-panel"
+  // details JSON
+  details         String?  // JSON
+  // mitigation
+  mitigatedAt     DateTime?
+  mitigatedById   String?
+  mitigationNotes String?
+  // metadata
+  metadata        String?  // JSON
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([domain])
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([detectedAt])
+  @@index([sourceIp])
+}
+
+model SecurityPolicy {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  domain          String
+  description     String
+  // policy config JSON
+  config          String   // JSON
+  // enforcement
+  enforcementMode String   @default("enforce") // enforce | monitor | disabled
+  // status
+  isActive        Boolean  @default(true)
+  // compliance
+  complianceScore Float    @default(1.0) // 0.0-1.0
+  lastCheckedAt   DateTime?
+  lastViolatedAt  DateTime?
+  violationCount  Int      @default(0)
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([domain])
+  @@index([isActive])
+  @@index([enforcementMode])
+}
+
+model ThreatIndicator {
+  id              String   @id @default(cuid())
+  // type: brute_force | credential_stuffing | sql_injection | xss | ddos | bot | scrapting | privilege_escalation | data_exfiltration | malware | anomalous_access
+  type            String
+  // severity: low | medium | high | critical
+  severity        String   @default("medium")
+  status          String   @default("active") // active | blocked | resolved | false_positive
+  title           String
+  description     String
+  // source
+  sourceIp        String?
+  sourceCountry   String?
+  sourceUserId    String?
+  // IoC (Indicators of Compromise)
+  iocType         String?  // ip | user_agent | pattern | hash | domain
+  iocValue        String?
+  // target
+  targetEndpoint  String?
+  targetUserId    String?
+  // detection
+  detectionMethod String?  // siem | waf | ids | anomaly | manual
+  confidence      Float    @default(0.5)
+  // mitigation
+  blockedAt       DateTime?
+  blockDuration   Int?     // seconds
+  // metadata
+  metadata        String?  // JSON
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([sourceIp])
+  @@index([detectedAt])
+}
+
+model BackupRecord {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  // type: full | incremental | differential | snapshot
+  type            String
+  // target: database | storage | config | full_system
+  target          String
+  // status: scheduled | in_progress | completed | failed | verified | expired
+  status          String   @default("scheduled")
+  // storage
+  sizeBytes       Int      @default(0)
+  compressedSizeBytes Int  @default(0)
+  storageLocation String?
+  storageProvider String   @default("local") // local | s3 | azure | gcp
+  // encryption
+  encrypted       Boolean  @default(true)
+  encryptionKeyId String?
+  checksum        String?
+  // retention
+  retentionDays   Int      @default(30)
+  expiresAt       DateTime?
+  // verification
+  verifiedAt      DateTime?
+  verifiedById    String?
+  verificationStatus String? // passed | failed | pending
+  // timing
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationMs      Int?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([target])
+  @@index([status])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model PenTestReport {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // type: internal | external | red_team | compliance | bug_bounty
+  type            String
+  // scope
+  scope           String   // JSON array of tested endpoints/systems
+  testDate        DateTime
+  testDuration    Int      // hours
+  // tester
+  testerName      String
+  testerType      String   @default("internal") // internal | external_firm | automated
+  // findings
+  criticalCount   Int      @default(0)
+  highCount       Int      @default(0)
+  mediumCount     Int      @default(0)
+  lowCount        Int      @default(0)
+  infoCount       Int      @default(0)
+  totalFindings   Int      @default(0)
+  // results
+  findings        String?  // JSON array of detailed findings
+  recommendations String?  // markdown
+  executiveSummary String?
+  // remediation
+  remediationStatus String @default("pending") // pending | in_progress | completed
+  remediatedCount Int      @default(0)
+  remediationDueAt DateTime?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([testDate])
+  @@index([remediationStatus])
+}
+
+model SecretRotation {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  // secretType: api_key | jwt_secret | database_password | encryption_key | tls_cert | oauth_secret | webhook_secret
+  secretType      String
+  secretName      String
+  description     String?
+  // rotation
+  rotationStatus  String   @default("scheduled") // scheduled | in_progress | completed | failed
+  rotationIntervalDays Int @default(90)
+  lastRotatedAt   DateTime?
+  nextRotationAt  DateTime?
+  rotatedById     String?
+  // versioning
+  currentVersion  Int      @default(1)
+  previousVersion Int?
+  // verification
+  verifiedAt      DateTime?
+  verificationStatus String? // passed | failed | pending
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([secretType])
+  @@index([rotationStatus])
+  @@index([nextRotationAt])
+}
+
+model DisasterRecoveryPlan {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String
+  // type: failover | backup_restore | regional | full_system
+  type            String
+  // RPO/RTO targets
+  rpoMinutes      Int      @default(60) // Recovery Point Objective
+  rtoMinutes      Int      @default(240) // Recovery Time Objective
+  // last test
+  lastTestedAt    DateTime?
+  lastTestStatus  String?  // passed | failed | partial
+  lastTestDurationMin Int?
+  // readiness
+  readinessScore  Float    @default(0.0) // 0.0-1.0
+  readinessStatus String   @default("unknown") // ready | degraded | not_ready | unknown
+  // steps
+  steps           String?  // JSON array of recovery steps
+  // metadata
+  metadata        String?  // JSON
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([readinessStatus])
+  @@index([isActive])
+}

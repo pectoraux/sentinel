@@ -2215,3 +2215,196 @@ model ApiIntegration {
   @@index([isActive])
   @@index([isOfficial])
 }
+
+// =============================================================================
+// MILESTONE 26 — Security Hardening
+// =============================================================================
+model SecurityEvent {
+  id              String   @id @default(cuid())
+  domain          String
+  type            String
+  severity        String   @default("info")
+  status          String   @default("active")
+  title           String
+  description     String
+  sourceIp        String?
+  sourceUserId    String?
+  sourceService   String?
+  targetResource  String?
+  details         String?
+  mitigatedAt     DateTime?
+  mitigatedById   String?
+  mitigationNotes String?
+  metadata        String?
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([domain])
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([detectedAt])
+  @@index([sourceIp])
+}
+
+model SecurityPolicy {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  domain          String
+  description     String
+  config          String
+  enforcementMode String   @default("enforce")
+  isActive        Boolean  @default(true)
+  complianceScore Float    @default(1.0)
+  lastCheckedAt   DateTime?
+  lastViolatedAt  DateTime?
+  violationCount  Int      @default(0)
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([domain])
+  @@index([isActive])
+  @@index([enforcementMode])
+}
+
+model ThreatIndicator {
+  id              String   @id @default(cuid())
+  type            String
+  severity        String   @default("medium")
+  status          String   @default("active")
+  title           String
+  description     String
+  sourceIp        String?
+  sourceCountry   String?
+  sourceUserId    String?
+  iocType         String?
+  iocValue        String?
+  targetEndpoint  String?
+  targetUserId    String?
+  detectionMethod String?
+  confidence      Float    @default(0.5)
+  blockedAt       DateTime?
+  blockDuration   Int?
+  metadata        String?
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([sourceIp])
+  @@index([detectedAt])
+}
+
+model BackupRecord {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  type            String
+  target          String
+  status          String   @default("scheduled")
+  sizeBytes       Int      @default(0)
+  compressedSizeBytes Int  @default(0)
+  storageLocation String?
+  storageProvider String   @default("local")
+  encrypted       Boolean  @default(true)
+  encryptionKeyId String?
+  checksum        String?
+  retentionDays   Int      @default(30)
+  expiresAt       DateTime?
+  verifiedAt      DateTime?
+  verifiedById    String?
+  verificationStatus String?
+  scheduledAt     DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationMs      Int?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([target])
+  @@index([status])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+model PenTestReport {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  type            String
+  scope           String
+  testDate        DateTime
+  testDuration    Int
+  testerName      String
+  testerType      String   @default("internal")
+  criticalCount   Int      @default(0)
+  highCount       Int      @default(0)
+  mediumCount     Int      @default(0)
+  lowCount        Int      @default(0)
+  infoCount       Int      @default(0)
+  totalFindings   Int      @default(0)
+  findings        String?
+  recommendations String?
+  executiveSummary String?
+  remediationStatus String @default("pending")
+  remediatedCount Int      @default(0)
+  remediationDueAt DateTime?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([testDate])
+  @@index([remediationStatus])
+}
+
+model SecretRotation {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  secretType      String
+  secretName      String
+  description     String?
+  rotationStatus  String   @default("scheduled")
+  rotationIntervalDays Int @default(90)
+  lastRotatedAt   DateTime?
+  nextRotationAt  DateTime?
+  rotatedById     String?
+  currentVersion  Int      @default(1)
+  previousVersion Int?
+  verifiedAt      DateTime?
+  verificationStatus String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([secretType])
+  @@index([rotationStatus])
+  @@index([nextRotationAt])
+}
+
+model DisasterRecoveryPlan {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String
+  type            String
+  rpoMinutes      Int      @default(60)
+  rtoMinutes      Int      @default(240)
+  lastTestedAt    DateTime?
+  lastTestStatus  String?
+  lastTestDurationMin Int?
+  readinessScore  Float    @default(0.0)
+  readinessStatus String   @default("unknown")
+  steps           String?
+  metadata        String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([type])
+  @@index([readinessStatus])
+  @@index([isActive])
+}
