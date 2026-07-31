@@ -1724,6 +1724,147 @@ async function seedIntelligenceData() {
   }
 
   console.log(`[seed] Seeded ${eventCount} intelligence events, ${commentCount} comments, ${subCount} subscriptions, ${shareCount} shares, ${streamCount} stream entries (event-sourced).`);
+
+  console.log("[seed] Seeding M10 civil trust data...");
+  await seedTrustData();
+}
+
+// ---------------------------------------------------------------------------
+// M10 — Civil Trust seed data
+// ---------------------------------------------------------------------------
+
+async function seedTrustData() {
+  const users = await prisma.user.findMany({ select: { id: true, email: true, name: true, createdAt: true } });
+  if (users.length === 0) return;
+
+  // Get intelligence events per user
+  const eventsByUser = await prisma.intelligenceEvent.groupBy({
+    by: ["createdById"],
+    _count: true,
+  });
+  const verifiedByUser = await prisma.intelligenceEvent.groupBy({
+    by: ["createdById"],
+    where: { status: "verified" },
+    _count: true,
+  });
+
+  // Get evidence weights per user
+  const evidenceByUser = new Map<string, { count: number; avgWeight: number }>();
+  const allEvidence = await prisma.evidence.findMany({ select: { id: true, uploadedById: true } });
+  const allWeights = await prisma.evidenceWeight.findMany({ select: { evidenceId: true, weight: true } });
+  const weightMap = new Map(allWeights.map((w) => [w.evidenceId, w.weight]));
+  for (const ev of allEvidence) {
+    if (!ev.uploadedById) continue;
+    const w = weightMap.get(ev.id) ?? 0.5;
+    const existing = evidenceByUser.get(ev.uploadedById) ?? { count: 0, avgWeight: 0 };
+    existing.count++;
+    existing.avgWeight = (existing.avgWeight * (existing.count - 1) + w) / existing.count;
+    evidenceByUser.set(ev.uploadedById, existing);
+  }
+
+  // Get corroboration counts per user
+  const corrobByUser = await prisma.corroboration.groupBy({
+    by: ["userId"],
+    _count: true,
+  });
+
+  // Get verifications per user
+  const verifByUser = await prisma.identityVerification.groupBy({
+    by: ["userId"],
+    where: { status: "approved" },
+    _count: true,
+  });
+
+  // Create trust factors for each user
+  let count = 0;
+  for (const user of users) {
+    const events = eventsByUser.find((e) => e.createdById === user.id)?._count ?? 0;
+    const verified = verifiedByUser.find((e) => e.createdById === user.id)?._count ?? 0;
+    const evidence = evidenceByUser.get(user.id) ?? { count: 0, avgWeight: 0.5 };
+    const corrobCount = corrobByUser.find((c) => c.userId === user.id)?._count ?? 0;
+    const verifs = verifByUser.find((v) => v.userId === user.id)?._count ?? 0;
+
+    // Compute factors
+    const accuracy = events > 0 ? verified / events : 0.5;
+    const reliability = 0.7;
+    const falseReportRate = events > 0 ? Math.max(0, (events - verified) / events * 0.3) : 0;
+    const falseReportCount = events > 0 ? Math.floor((events - verified) * 0.3) : 0;
+    const evidenceQuality = evidence.avgWeight || 0.5;
+    const contributionQuality = corrobCount > 0 ? Math.min(0.9, 0.5 + corrobCount * 0.1) : 0.5;
+    const communityImpact = Math.min(1.0, verifs * 0.15 + corrobCount * 0.05);
+    const fraudResistance = 1.0;
+    const decayRate = 0.05; // small decay for demo
+
+    // Compute composite (simplified — mirrors the domain)
+    const baseScore = accuracy * 0.20 + reliability * 0.15 + (1 - falseReportRate) * 0.15 + evidenceQuality * 0.15 + contributionQuality * 0.10 + communityImpact * 0.10;
+    const compositeScore = Math.max(0, Math.min(1, baseScore * (1 - decayRate) * fraudResistance));
+    const tier = compositeScore >= 0.85 ? "elite" : compositeScore >= 0.7 ? "trusted" : compositeScore >= 0.5 ? "verified" : compositeScore >= 0.3 ? "basic" : "unverified";
+
+    await prisma.trustFactor.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        accuracy,
+        reliability,
+        falseReportRate,
+        falseReportCount,
+        evidenceQuality,
+        contributionQuality,
+        communityImpact,
+        fraudResistance,
+        fraudFlagCount: 0,
+        totalReports: events,
+        verifiedReports: verified,
+        totalEvidence: evidence.count,
+        totalComments: 0,
+        totalShares: 0,
+        lastActivityAt: new Date(Date.now() - Math.floor(Math.random() * 60 * 24 * 60 * 60 * 1000)),
+        decayRate,
+        compositeScore,
+        tier,
+        factors: JSON.stringify({
+          factors: { accuracy, reliability, falseReportPenalty: 1 - falseReportRate, evidenceQuality, contributionQuality, communityImpact, decayMultiplier: 1 - decayRate, fraudMultiplier: fraudResistance },
+          weightedBreakdown: { accuracy: accuracy * 0.20, reliability: reliability * 0.15, falseReportPenalty: (1 - falseReportRate) * 0.15, evidenceQuality: evidenceQuality * 0.15, contributionQuality: contributionQuality * 0.10, communityImpact: communityImpact * 0.10 },
+        }),
+        lastCalculatedAt: new Date(),
+      },
+      update: {},
+    });
+
+    // Create a fraud flag for one user (demo)
+    if (user.email === "reporter.kwame@community.org") {
+      await prisma.fraudFlag.create({
+        data: {
+          userId: user.id,
+          type: "duplicate_spam",
+          severity: "low",
+          description: "2 near-identical reports submitted within 5 minutes",
+          status: "detected",
+          penalty: 0.05,
+        },
+      }).catch(() => {});
+    }
+
+    count++;
+  }
+
+  // Create a few decay logs
+  const firstUser = users[0]!;
+  for (let i = 0; i < 3; i++) {
+    await prisma.trustDecayLog.create({
+      data: {
+        userId: firstUser.id,
+        previousScore: 0.95 - i * 0.02,
+        newScore: 0.93 - i * 0.02,
+        decayAmount: 0.02,
+        daysInactive: 30 + i * 30,
+        decayRate: 0.02 + i * 0.01,
+        appliedAt: new Date(Date.now() - i * 24 * 60 * 60 * 1000),
+      },
+    }).catch(() => {});
+  }
+
+  console.log(`[seed] Seeded ${count} trust factor records with 8-factor computation, 1 fraud flag, 3 decay logs.`);
 }
 
 main()

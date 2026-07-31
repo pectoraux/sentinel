@@ -1081,3 +1081,96 @@ model EvidenceWeight {
   @@index([tier])
   @@index([confidence])
 }
+
+// =============================================================================
+// MILESTONE 10 — Civil Trust Engine
+// =============================================================================
+// Production trust system replacing simple reputation. Tracks 8 factors:
+//   1. Accuracy       — verified reports / total reports
+//   2. Reliability    — consistency over time (report frequency + verification rate)
+//   3. False reports  — count of false-positive submissions (penalty)
+//   4. Evidence quality — aggregate from M9 evidence weights
+//   5. Contribution quality — comment/event quality (corroboration support rate)
+//   6. Community impact  — positive impact (resolutions, helpful shares)
+//   7. Decay          — trust decays if inactive (half-life 90 days)
+//   8. Fraud resistance — fraud flags reduce trust; clean history boosts it
+// =============================================================================
+
+model TrustFactor {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  // Core metrics (each 0.0–1.0 unless noted)
+  accuracy        Float    @default(0.5)   // verified / total reports
+  reliability     Float    @default(0.5)   // consistency score
+  falseReportRate Float    @default(0.0)   // false reports / total reports
+  falseReportCount Int     @default(0)
+  evidenceQuality Float    @default(0.5)   // avg evidence weight (M9)
+  contributionQuality Float @default(0.5)  // corroboration support rate
+  communityImpact Float    @default(0.0)   // positive impact score
+  fraudResistance Float    @default(1.0)   // 1.0 = clean, decreases per flag
+  fraudFlagCount  Int      @default(0)
+  // Activity metrics
+  totalReports    Int      @default(0)
+  verifiedReports Int      @default(0)
+  totalEvidence   Int      @default(0)
+  totalComments   Int      @default(0)
+  totalShares     Int      @default(0)
+  lastActivityAt  DateTime?
+  // Decay tracking
+  decayRate       Float    @default(0.0)   // current decay multiplier (0.0 = no decay, 1.0 = full)
+  lastDecayAt     DateTime?
+  // Computed composite
+  compositeScore  Float    @default(0.0)   // final 0.0–1.0 trust score
+  tier            String   @default("unverified") // unverified | basic | verified | trusted | elite
+  factors         String?  // JSON breakdown of how composite was computed
+  lastCalculatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([compositeScore])
+  @@index([tier])
+  @@index([accuracy])
+}
+
+model TrustDecayLog {
+  id              String   @id @default(cuid())
+  userId          String
+  // previousScore / newScore after decay
+  previousScore   Float
+  newScore        Float
+  decayAmount     Float
+  // daysInactive: days since last activity
+  daysInactive    Int
+  // decayRate applied
+  decayRate       Float
+  appliedAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([appliedAt])
+}
+
+model FraudFlag {
+  id              String   @id @default(cuid())
+  userId          String
+  // type: duplicate_spam | false_report | coordinated_manipulation | bot_behavior | identity_theft | other
+  type            String
+  // severity: low | medium | high | critical
+  severity        String   @default("medium")
+  description     String
+  // evidence: JSON array of evidence/event IDs supporting the flag
+  evidence        String?
+  // status: detected | investigating | confirmed | dismissed | resolved
+  status          String   @default("detected")
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  resolvedById    String?
+  resolution      String?
+  // penalty: trust score penalty applied (0.0–1.0)
+  penalty         Float    @default(0.0)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([severity])
+}

@@ -400,3 +400,43 @@ Stage Summary:
 - Delivered: "Instead of up/down votes." Evidence is assessed through Support, Dispute, Independent corroboration, Duplicate detection, Witness confidence, and Evidence weighting. Every evidence item gets a multi-factor reliability weight (0-100%) and a 5-tier classification (unverified → weak → moderate → strong → confirmed). Duplicate detection runs 4 methods (hash_match, location_proximity, time_proximity, content_similarity). Independence checking prevents collusion by verifying different org/device/no graph relationship.
 - 9 corroboration records (7 supports + 2 disputes), 4 independent, 1 duplicate group, 8 weighted evidence items.
 - The Corroboration Engine integrates with: M2 Trust Profiles (submitter trust score feeds into baseTrust), M6 Knowledge Graph (independence check via graph relationships), M7 Evidence Platform (hash chains + checksums for duplicate detection), M8 Community Intelligence (corroboration events can stream to the event log).
+
+---
+Task ID: M10
+Agent: orchestrator
+Task: Milestone 10 — Civil Trust Engine
+
+Work Log:
+- Extended Prisma schema (both SQLite + PostgreSQL) with 3 new models: TrustFactor (8-factor tracking: accuracy, reliability, falseReportRate, evidenceQuality, contributionQuality, communityImpact, fraudResistance, decayRate + activity metrics + compositeScore + tier + factors JSON), TrustDecayLog (previousScore/newScore/decayAmount/daysInactive/decayRate/appliedAt), FraudFlag (type/severity/description/evidence/status/penalty).
+- Built trust domain (src/modules/trust/domain/trust-engine.ts):
+  - 8-factor weighted trust computation: accuracy(0.20) + reliability(0.15) + falseReportPenalty(0.15) + evidenceQuality(0.15) + contributionQuality(0.10) + communityImpact(0.10) = baseScore, then × decayMultiplier × fraudMultiplier = compositeScore
+  - 5-tier system: unverified(0-30%) → basic(30-50%) → verified(50-70%) → trusted(70-85%) → elite(85%+)
+  - Decay algorithm: half-life 90 days. decayRate = 1 - 0.5^(daysInactive/90). 0 days→0%, 30 days→21%, 90 days→50%, 180 days→75%, 365 days→94%.
+  - Fraud resistance: each fraud flag reduces resistance by severity penalty (low=0.05, medium=0.15, high=0.30, critical=0.60). fraudResistance = max(0, 1.0 - sum(penalties)).
+  - Fraud detection heuristics: 4 detection methods — duplicate_spam (≥3 duplicates), false_report (>40% false report rate), coordinated_manipulation (≥3 same-org corroborations), bot_behavior (>80% activity regularity). Returns suggested flags with severity.
+- Built CivilTrustService (src/modules/trust/application/services/civil-trust.service.ts):
+  - computeTrustForUser(userId): gathers data from M2 verifications, M8 intelligence events, M9 evidence weights, M9 corroboration records → computes all 8 factors → persists TrustFactor record + updates M2 TrustProfile for backward compatibility
+  - applyDecayAll(): iterates all users with TrustFactor records, computes decay based on inactivity, updates compositeScore + tier, logs to TrustDecayLog. Designed to run as a daily background job.
+  - detectFraud(userId): runs heuristics (false report rate, duplicate count, coordinated manipulation, bot behavior) → creates FraudFlag records → recomputes trust
+  - getProfile(userId): returns composite score + tier + all 8 factors + activity metrics + decay/fraud info
+  - getFraudFlags(userId), resolveFraudFlag(flagId, status, resolvedBy, resolution), getDecayHistory(userId)
+  - leaderboard(limit): top users by compositeScore with factor breakdown
+  - summary(): aggregate metrics (totalUsers, tierDistribution, averages for all 8 factors, fraudFlags by type/status, recentDecay)
+- Built 5 API routes: trust/summary (public), trust/leaderboard (public), trust/profile/[userId] (public), trust/decay (POST, admin), trust/fraud (GET flags, POST detect).
+- Seed: computed trust factors for all 6 users by gathering real data from M2/M8/M9 — accuracy from verified/total intelligence events, evidenceQuality from M9 evidence weights, contributionQuality from M9 corroboration support rate, communityImpact from verifications + independent corroborations. Created 1 fraud flag (duplicate_spam for citizen reporter), 3 decay logs showing decay over time. Result: 4 basic tier, 2 verified tier, averages: accuracy=0.45, reliability=0.70, evidenceQuality=0.58, contributionQuality=0.65, communityImpact=0.30, fraudResistance=1.00, decayRate=0.05.
+- UI: Built TrustDashboard component with:
+  - 8 KPIs (accuracy, reliability, evidence quality, contribution quality, community impact, fraud resistance, avg decay, fraud flags) — all showing platform-wide averages
+  - Trust Leaderboard — top 10 users by composite score with tier badge + accuracy/evidence/fraud mini-stats, click to select
+  - Trust Profile panel — composite score bar + tier badge, 8-factor grid with icons + progress bars + weighted values, activity metrics (reports/verified/false reports), decay + fraud resistance summary
+  - Recent Decay Events — log of recent decay applications showing previous→new score, decay amount, days inactive
+  - Tier Distribution — bar chart (elite/trusted/verified/basic/unverified) + summary stats (users, fraud flags, avg decay, fraud resistance)
+  - Fraud Detection — flags by type (color-coded) + 4 detection method descriptions
+- Updated DashboardTabs to 10 tabs (Civil Trust Engine default, Corroboration, Community Intelligence, Evidence, Knowledge Graph, Temporal, Digital Twin, Geospatial, Identity & Trust, Platform Foundation). Updated hero, header badge, footer, checklist, API info.
+- Fixed: missing `getCivilTrustService` export from trust module barrel, Prisma aggregate field syntax (`accuracy: true` not `accuracy`), removed `include: { user }` from TrustDecayLog/TrustFactor queries (no relation defined — fetch users separately).
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification: Civil Trust Engine tab (default) renders all 6 sections. 10 tabs switch correctly. Summary: 6 users, 1 fraud flag, 4 basic + 2 verified tier. No errors.
+
+Stage Summary:
+- Milestone 10 (Civil Trust Engine) is COMPLETE and browser-verified.
+- Delivered: Production trust system replacing reputation. 8-factor weighted trust computation: Accuracy (verified/total reports), Reliability (consistency over time), False reports (penalty), Evidence quality (from M9 aggregate), Contribution quality (corroboration support rate), Community impact (verifications + independent corroborations), Decay (90-day half-life — trust erodes with inactivity), Fraud resistance (automated detection of duplicate spam, false reports, coordinated manipulation, bot behavior). Composite score = weighted sum × decay multiplier × fraud multiplier.
+- The Civil Trust Engine integrates with ALL prior milestones: M2 Trust Profiles (backward compatible), M8 Intelligence Events (accuracy tracking), M9 Evidence Weights (evidence quality), M9 Corroboration (contribution quality), M6 Knowledge Graph (independence checking for fraud detection).
