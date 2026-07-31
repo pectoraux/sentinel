@@ -45,15 +45,17 @@ import { TwinDashboard } from "@/components/sentinel/twin/twin-dashboard";
 import { TemporalDashboard } from "@/components/sentinel/twin/temporal-dashboard";
 import { KnowledgeGraphDashboard } from "@/components/sentinel/twin/knowledge-graph-dashboard";
 import { EvidenceDashboard } from "@/components/sentinel/evidence/evidence-dashboard";
+import { IntelligenceDashboard } from "@/components/sentinel/intelligence/intelligence-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService } from "@/modules/evidence";
+import { getIntelligenceService } from "@/modules/intelligence";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Fetch ALL dashboard data server-side in parallel (M1–M7).
+  // Fetch ALL dashboard data server-side in parallel (M1–M8).
   const [
     health,
     flags,
@@ -70,6 +72,7 @@ export default async function DashboardPage() {
     temporalSummary,
     kgAnalytics,
     evidenceSummary,
+    intelSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -86,6 +89,7 @@ export default async function DashboardPage() {
     getTemporalService().temporalSummary(),
     getKnowledgeGraphService().analytics(),
     getEvidenceService().summary(),
+    getIntelligenceService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -167,7 +171,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M7 · Evidence
+                  M8 · Community Intelligence
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -196,13 +200,13 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Evidence Platform
+                Community Intelligence
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Universal evidence service for images, video, audio, documents, GPS tracks,
-                and sensor logs. Every item is SHA-256 hashed, hash-chained for tamper
-                detection, optionally encrypted with AES-256-GCM, GPS-tagged, and fully
-                versioned with immutable history.
+                Users create intelligence events, upload evidence, subscribe, comment,
+                watch, share, and follow. Everything is event-sourced — each action
+                appends an immutable event to the stream. The current state is a
+                projection (fold) over the event log. Nothing is mutated in place.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -217,19 +221,22 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M7: Evidence Platform (first child = first tab, default) === */}
+          {/* === M8: Community Intelligence (first child = first tab, default) === */}
+          <IntelligenceDashboard initialSummary={intelSummary} />
+
+          {/* === M7: Evidence Platform (second child = second tab) === */}
           <EvidenceDashboard initialSummary={evidenceSummary} />
 
-          {/* === M6: Knowledge Graph (second child = second tab) === */}
+          {/* === M6: Knowledge Graph (third child = third tab) === */}
           <KnowledgeGraphDashboard initialAnalytics={kgAnalytics} initialGraph={kgGraph} />
 
-          {/* === M5: Temporal Engine (third child = third tab) === */}
+          {/* === M5: Temporal Engine (fourth child = fourth tab) === */}
           <TemporalDashboard initialSummary={temporalSummary} />
 
-          {/* === M4: Digital Twin (fourth child = fourth tab) === */}
+          {/* === M4: Digital Twin (fifth child = fifth tab) === */}
           <TwinDashboard initialSummary={twinSummary} initialGraph={twinGraph} />
 
-          {/* === M3: Geospatial (fifth child = fifth tab) === */}
+          {/* === M3: Geospatial (sixth child = sixth tab) === */}
           <GeospatialDashboard
             initialSummary={geoSummary}
             initialPois={geoPois}
@@ -237,10 +244,10 @@ export default async function DashboardPage() {
             initialLayers={geoLayers}
           />
 
-          {/* === M2: Identity & Trust (sixth child = sixth tab) === */}
+          {/* === M2: Identity & Trust (seventh child = seventh tab) === */}
           <IdentityDashboard initial={identitySummaryRaw} />
 
-          {/* === M1: Foundation (seventh child = seventh tab) === */}
+          {/* === M1: Foundation (eighth child = eighth tab) === */}
           <div>
             {/* KPI row */}
             <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -494,8 +501,12 @@ export default async function DashboardPage() {
                     "M7: SHA-256 Hashing + Hash Chain Tamper Detection",
                     "M7: AES-256-GCM Encryption + KMS Keys",
                     "M7: GPS Tagging + Metadata + Version History",
-                    "M8: Intelligence Engine (next)",
-                    "M9: Community Reporting (next)",
+                    "M8: Community Intelligence (Event-Sourced)",
+                    "M8: Subscribe · Watch · Follow · Share · Comment",
+                    "M8: Append-Only Event Stream · Projection Fold",
+                    "M8: Evidence Attachment + Threaded Comments",
+                    "M9: Intelligence Engine (next)",
+                    "M10: Predictive Analytics (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -514,12 +525,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M7 — Evidence</span>
+            <span>Sentinel Platform · M8 — Community Intelligence</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
             <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
             <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>
             <Link href="/api/v1/twin/temporal/summary" className="hover:text-foreground transition-colors">Temporal</Link>

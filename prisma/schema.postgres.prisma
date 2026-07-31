@@ -802,3 +802,113 @@ model EvidenceVersion {
   @@index([evidenceId])
   @@index([validFrom])
 }
+
+// =============================================================================
+// MILESTONE 8 — Community Intelligence (Event-Sourced)
+// =============================================================================
+
+model IntelligenceEvent {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String?
+  type            String
+  status          String   @default("open")
+  severity        String   @default("medium")
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  createdById     String
+  organizationId  String?
+  twinEntityId    String?
+  evidenceIds     String?
+  commentCount    Int      @default(0)
+  subscriberCount Int      @default(0)
+  watcherCount    Int      @default(0)
+  shareCount      Int      @default(0)
+  viewCount       Int      @default(0)
+  streamVersion   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stream          EventStreamEntry[]
+  comments        EventComment[]
+  subscriptions   EventSubscription[]
+  shares          EventShare[]
+
+  @@index([type])
+  @@index([status])
+  @@index([severity])
+  @@index([createdById])
+  @@index([organizationId])
+  @@index([lat, lng])
+  @@index([createdAt])
+}
+
+model EventStreamEntry {
+  id              String   @id @default(cuid())
+  eventId         String
+  version         Int
+  eventType       String
+  actorId         String?
+  actorType       String   @default("user")
+  payload         String?
+  metadata        String?
+  timestamp       DateTime @default(now())
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, version])
+  @@index([eventId])
+  @@index([eventType])
+  @@index([timestamp])
+  @@index([actorId])
+}
+
+model EventComment {
+  id              String   @id @default(cuid())
+  eventId         String
+  authorId        String
+  body            String
+  parentId        String?
+  attachments     String?
+  edited          Boolean  @default(false)
+  editedAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+model EventSubscription {
+  id              String   @id @default(cuid())
+  eventId         String
+  userId          String
+  type            String   @default("watch")
+  createdAt       DateTime @default(now())
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, type])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventShare {
+  id              String   @id @default(cuid())
+  eventId         String
+  sharedById      String
+  platform        String   @default("internal")
+  recipientId     String?
+  message         String?
+  createdAt       DateTime @default(now())
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([sharedById])
+}

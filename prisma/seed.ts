@@ -1261,6 +1261,320 @@ async function seedEvidenceData() {
   }
 
   console.log(`[seed] Seeded ${count} evidence items (images, video, audio, documents, GPS, sensor logs) with hash chains and version history.`);
+
+  console.log("[seed] Seeding M8 community intelligence data...");
+  await seedIntelligenceData();
+}
+
+// ---------------------------------------------------------------------------
+// M8 — Community Intelligence seed data (event-sourced)
+// ---------------------------------------------------------------------------
+
+const SAMPLE_EVENTS = [
+  {
+    key: "evt-prestea-cyanide-spill",
+    title: "Cyanide Spill on Pra River near Prestea",
+    description: "Community members report cyanide contamination in the Pra River originating from the Prestea galamsey complex. Fish dying, water unsafe for drinking.",
+    type: "water_contamination",
+    severity: "critical",
+    status: "investigating",
+    lat: 5.4310,
+    lng: -2.1440,
+    locationName: "Pra River, Prestea, Western Region",
+    daysAgo: 7,
+    comments: [
+      { body: "I saw the water turn blue-green yesterday morning. Many dead fish floating.", authorIdx: 4, daysAgo: 6 },
+      { body: "EPA team should test the water immediately. This is a public health emergency.", authorIdx: 1, daysAgo: 5 },
+      { body: "We have lab results confirming mercury levels at 0.004 ppm — 4x the safe threshold.", authorIdx: 0, daysAgo: 5, attachments: ["evd-prestea-cyanide-002"] },
+      { body: "Community members are reporting skin rashes after using the river water.", authorIdx: 4, daysAgo: 3 },
+    ],
+    subscriptions: [
+      { userIdx: 0, type: "watch" },
+      { userIdx: 1, type: "watch" },
+      { userIdx: 2, type: "follow" },
+      { userIdx: 3, type: "watch" },
+      { userIdx: 4, type: "follow" },
+    ],
+    shares: [
+      { sharedByIdx: 0, platform: "internal", recipientIdx: 1 },
+      { sharedByIdx: 1, platform: "whatsapp" },
+      { sharedByIdx: 4, platform: "telegram" },
+    ],
+  },
+  {
+    key: "evt-obuasi-pit-expansion",
+    title: "Illegal Pit Expansion at Obuasi Concession",
+    description: "Drone survey reveals 30-hectare expansion of illegal mining pit within the AngloGold Ashanti concession boundary.",
+    type: "illegal_mining",
+    severity: "high",
+    status: "open",
+    lat: 6.2062,
+    lng: -1.6678,
+    locationName: "Obuasi, Ashanti Region",
+    daysAgo: 30,
+    comments: [
+      { body: "The expansion is clearly visible in the drone footage. Trespass mining is ongoing.", authorIdx: 0, daysAgo: 29, attachments: ["evd-obuasi-drone-survey"] },
+      { body: "AngloGold security should be notified. This is within their legal boundary.", authorIdx: 1, daysAgo: 28 },
+      { body: "We need a follow-up inspection to assess environmental damage.", authorIdx: 0, daysAgo: 27 },
+    ],
+    subscriptions: [
+      { userIdx: 0, type: "watch" },
+      { userIdx: 1, type: "watch" },
+      { userIdx: 4, type: "watch" },
+    ],
+    shares: [
+      { sharedByIdx: 0, platform: "internal", recipientIdx: 2 },
+    ],
+  },
+  {
+    key: "evt-atewa-forest-clearing",
+    title: "Forest Clearing Detected in Atewa Reserve",
+    description: "Satellite imagery analysis detects 4% canopy loss in the northern sector of Atewa Forest Reserve — likely bauxite mining encroachment.",
+    type: "deforestation",
+    severity: "high",
+    status: "verified",
+    lat: 6.1667,
+    lng: -0.5500,
+    locationName: "Atewa Forest Reserve, Eastern Region",
+    daysAgo: 60,
+    comments: [
+      { body: "Sentinel-2 imagery from June clearly shows the clearing. We need ground verification.", authorIdx: 2, daysAgo: 59, attachments: ["evd-atewa-satellite-2024"] },
+      { body: "This is a protected Hill Sanctuary. The Forestry Commission must act immediately.", authorIdx: 1, daysAgo: 58 },
+      { body: "Ground inspection confirmed illegal access roads into the reserve.", authorIdx: 0, daysAgo: 50 },
+      { body: "Status updated to verified — clearing confirmed at 4% canopy loss.", authorIdx: 0, daysAgo: 45 },
+    ],
+    subscriptions: [
+      { userIdx: 0, type: "watch" },
+      { userIdx: 1, type: "watch" },
+      { userIdx: 2, type: "watch" },
+      { userIdx: 3, type: "follow" },
+    ],
+    shares: [
+      { sharedByIdx: 2, platform: "twitter" },
+      { sharedByIdx: 1, platform: "email" },
+    ],
+  },
+  {
+    key: "evt-dunkwa-river-diversion",
+    title: "River Diversion at Dunkwa Alluvial Site",
+    description: "Alluvial mining at Dunkwa has diverted the Offin River channel, affecting downstream water supply.",
+    type: "water_contamination",
+    severity: "medium",
+    status: "open",
+    lat: 5.9783,
+    lng: -1.7822,
+    locationName: "Dunkwa-on-Offin, Central Region",
+    daysAgo: 14,
+    comments: [
+      { body: "The river flow has changed direction. Our fishing boats can't reach the usual spots.", authorIdx: 4, daysAgo: 13 },
+      { body: "This is affecting the Dunkwa community water supply. Need urgent assessment.", authorIdx: 3, daysAgo: 12 },
+    ],
+    subscriptions: [
+      { userIdx: 3, type: "watch" },
+      { userIdx: 4, type: "watch" },
+    ],
+    shares: [
+      { sharedByIdx: 3, platform: "whatsapp" },
+    ],
+  },
+  {
+    key: "evt-tarkwa-mercury-pollution",
+    title: "Mercury Pollution in Tarkwa Mining Area",
+    description: "Soil and water samples from the Tarkwa-Prestea belt show elevated mercury levels from artisanal gold processing.",
+    type: "pollution",
+    severity: "high",
+    status: "investigating",
+    lat: 5.3056,
+    lng: -1.9933,
+    locationName: "Tarkwa, Western Region",
+    daysAgo: 20,
+    comments: [
+      { body: "Mercury is being used openly in the processing sites. No containment measures.", authorIdx: 0, daysAgo: 19 },
+      { body: "Health workers report increased mercury poisoning cases at Tarkwa hospital.", authorIdx: 1, daysAgo: 18 },
+      { body: "We need to map all processing sites and issue cease orders.", authorIdx: 0, daysAgo: 15 },
+    ],
+    subscriptions: [
+      { userIdx: 0, type: "watch" },
+      { userIdx: 1, type: "watch" },
+      { userIdx: 2, type: "follow" },
+    ],
+    shares: [
+      { sharedByIdx: 1, platform: "internal", recipientIdx: 3 },
+    ],
+  },
+];
+
+async function seedIntelligenceData() {
+  const now = new Date();
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  // Get users
+  const users = await prisma.user.findMany({ select: { id: true, email: true } });
+  if (users.length < 5) return;
+  const admin = users[0]!; // admin@sentinel.africa
+  const getUser = (idx: number) => users[idx % users.length]!;
+
+  // Get evidence IDs for attachments
+  const evidence = await prisma.evidence.findMany({ select: { id: true, key: true } });
+  const evidenceKeyToId = new Map(evidence.map((e) => [e.key, e.id]));
+
+  let eventCount = 0;
+  let commentCount = 0;
+  let subCount = 0;
+  let shareCount = 0;
+  let streamCount = 0;
+
+  for (const ev of SAMPLE_EVENTS) {
+    const creator = getUser(0);
+    const createdAt = daysAgo(ev.daysAgo);
+
+    // Create the event
+    const event = await prisma.intelligenceEvent.upsert({
+      where: { key: ev.key },
+      create: {
+        key: ev.key,
+        title: ev.title,
+        description: ev.description,
+        type: ev.type,
+        severity: ev.severity,
+        status: ev.status,
+        lat: ev.lat,
+        lng: ev.lng,
+        locationName: ev.locationName,
+        createdById: creator.id,
+        streamVersion: 1,
+        createdAt,
+        updatedAt: createdAt,
+      },
+      update: {},
+    });
+
+    // Append "created" stream event
+    await prisma.eventStreamEntry.create({
+      data: {
+        eventId: event.id,
+        version: 1,
+        eventType: "created",
+        actorId: creator.id,
+        actorType: "user",
+        payload: JSON.stringify({ title: ev.title, type: ev.type, severity: ev.severity, lat: ev.lat, lng: ev.lng, locationName: ev.locationName }),
+        timestamp: createdAt,
+      },
+    });
+    streamCount++;
+
+    let version = 1;
+
+    // Add comments
+    for (const comment of ev.comments) {
+      const author = getUser(comment.authorIdx);
+      const commentTime = daysAgo(comment.daysAgo);
+      const attachmentIds = (comment.attachments ?? []).map((k) => evidenceKeyToId.get(k)).filter(Boolean) as string[];
+
+      const createdComment = await prisma.eventComment.create({
+        data: {
+          eventId: event.id,
+          authorId: author.id,
+          body: comment.body,
+          attachments: attachmentIds.length > 0 ? JSON.stringify(attachmentIds) : null,
+          createdAt: commentTime,
+          updatedAt: commentTime,
+        },
+      });
+
+      version++;
+      await prisma.eventStreamEntry.create({
+        data: {
+          eventId: event.id,
+          version,
+          eventType: "commented",
+          actorId: author.id,
+          actorType: "user",
+          payload: JSON.stringify({ commentId: createdComment.id, body: comment.body, attachments: attachmentIds }),
+          timestamp: commentTime,
+        },
+      });
+      streamCount++;
+      commentCount++;
+    }
+
+    // Add subscriptions
+    for (const sub of ev.subscriptions) {
+      const user = getUser(sub.userIdx);
+      const subTime = daysAgo(sub.userIdx + 1);
+      // Create the subscription record
+      await prisma.eventSubscription.create({
+        data: {
+          eventId: event.id,
+          userId: user.id,
+          type: sub.type,
+          createdAt: subTime,
+        },
+      }).catch(() => {});
+      version++;
+      await prisma.eventStreamEntry.create({
+        data: {
+          eventId: event.id,
+          version,
+          eventType: "subscribed",
+          actorId: user.id,
+          actorType: "user",
+          payload: JSON.stringify({ userId: user.id, subscriptionType: sub.type }),
+          timestamp: subTime,
+        },
+      });
+      streamCount++;
+      subCount++;
+    }
+
+    // Add shares
+    for (const share of ev.shares) {
+      const sharer = getUser(share.sharedByIdx);
+      const shareTime = daysAgo(share.sharedByIdx + 2);
+      // Create the share record
+      await prisma.eventShare.create({
+        data: {
+          eventId: event.id,
+          sharedById: sharer.id,
+          platform: share.platform,
+          recipientId: share.recipientIdx !== undefined ? getUser(share.recipientIdx).id : null,
+          createdAt: shareTime,
+        },
+      }).catch(() => {});
+      version++;
+      await prisma.eventStreamEntry.create({
+        data: {
+          eventId: event.id,
+          version,
+          eventType: "shared",
+          actorId: sharer.id,
+          actorType: "user",
+          payload: JSON.stringify({ platform: share.platform, recipientId: share.recipientIdx !== undefined ? getUser(share.recipientIdx).id : null }),
+          timestamp: shareTime,
+        },
+      });
+      streamCount++;
+      shareCount++;
+    }
+
+    // Update projection counters
+    await prisma.intelligenceEvent.update({
+      where: { id: event.id },
+      data: {
+        commentCount: ev.comments.length,
+        subscriberCount: ev.subscriptions.length,
+        watcherCount: ev.subscriptions.filter((s) => s.type === "watch").length,
+        shareCount: ev.shares.length,
+        viewCount: Math.floor(Math.random() * 200) + 50,
+        streamVersion: version,
+        updatedAt: daysAgo(1),
+      },
+    });
+
+    eventCount++;
+  }
+
+  console.log(`[seed] Seeded ${eventCount} intelligence events, ${commentCount} comments, ${subCount} subscriptions, ${shareCount} shares, ${streamCount} stream entries (event-sourced).`);
 }
 
 main()

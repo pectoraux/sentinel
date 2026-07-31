@@ -861,3 +861,140 @@ model EvidenceVersion {
   @@index([evidenceId])
   @@index([validFrom])
 }
+
+// =============================================================================
+// MILESTONE 8 — Community Intelligence (Event-Sourced)
+// =============================================================================
+// Users create Intelligence Events, upload evidence, subscribe, comment, watch,
+// share, and follow. EVERYTHING is event-sourced: each action appends an
+// immutable event to the IntelligenceEventStream. The current state is a
+// projection (fold) over the event stream — nothing is mutated in place.
+//
+// Models:
+//   IntelligenceEvent   — the aggregate root (projection of the event stream)
+//   EventStreamEntry    — immutable append-only event log (the source of truth)
+//   EventComment        — comments on an event
+//   EventSubscription   — watch/follow subscriptions
+//   EventShare          — share records
+//   EventProjection     — cached read model (rebuildable from the stream)
+// =============================================================================
+
+model IntelligenceEvent {
+  id              String   @id @default(cuid())
+  key             String   @unique // human-readable key
+  title           String
+  description     String?
+  // type: pollution | deforestation | illegal_mining | water_contamination | land_degradation | wildlife_crime | other
+  type            String
+  status          String   @default("open") // open | investigating | verified | resolved | false_positive
+  severity        String   @default("medium") // low | medium | high | critical
+  // location
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  // ownership
+  createdById     String
+  organizationId  String?
+  twinEntityId    String?
+  // linked evidence
+  evidenceIds     String?  // JSON array of Evidence IDs
+  // projection counters (derived from event stream)
+  commentCount    Int      @default(0)
+  subscriberCount Int      @default(0)
+  watcherCount    Int      @default(0)
+  shareCount      Int      @default(0)
+  viewCount       Int      @default(0)
+  // stream version (optimistic concurrency)
+  streamVersion   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stream          EventStreamEntry[]
+  comments        EventComment[]
+  subscriptions   EventSubscription[]
+  shares          EventShare[]
+
+  @@index([type])
+  @@index([status])
+  @@index([severity])
+  @@index([createdById])
+  @@index([organizationId])
+  @@index([lat, lng])
+  @@index([createdAt])
+}
+
+// The append-only event log — the source of truth. Every action (create,
+// comment, subscribe, share, status change, evidence attach) appends here.
+model EventStreamEntry {
+  id              String   @id @default(cuid())
+  eventId         String
+  version         Int      // monotonically increasing per event
+  // eventType: created | commented | subscribed | unsubscribed | watched | shared | viewed | status_changed | evidence_attached | severity_changed | description_updated
+  eventType       String
+  actorId         String?
+  actorType       String   @default("user") // user | system | sensor | satellite
+  // payload: JSON — event-specific data (comment text, subscriber userId, etc.)
+  payload         String?
+  metadata        String?  // JSON — traceId, ip, userAgent
+  timestamp       DateTime @default(now())
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, version])
+  @@index([eventId])
+  @@index([eventType])
+  @@index([timestamp])
+  @@index([actorId])
+}
+
+model EventComment {
+  id              String   @id @default(cuid())
+  eventId         String
+  authorId        String
+  body            String
+  // parentId: null for top-level, or ID of parent comment for threaded replies
+  parentId        String?
+  // attachments: JSON array of evidence IDs referenced in the comment
+  attachments     String?
+  edited          Boolean  @default(false)
+  editedAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+model EventSubscription {
+  id              String   @id @default(cuid())
+  eventId         String
+  userId          String
+  // type: watch (get notifications) | follow (track in feed) | mute (suppress)
+  type            String   @default("watch")
+  createdAt       DateTime @default(now())
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId, type])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model EventShare {
+  id              String   @id @default(cuid())
+  eventId         String
+  sharedById      String
+  // platform: internal | email | twitter | whatsapp | telegram | link
+  platform        String   @default("internal")
+  recipientId     String?  // for internal shares
+  message         String?
+  createdAt       DateTime @default(now())
+
+  event IntelligenceEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([sharedById])
+}

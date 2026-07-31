@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,6 +13,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "intel", label: "Community Intelligence", icon: Radio, description: "M8 · Event-sourced · Subscribe · Comment · Share · Follow", short: "M8" },
   { id: "evidence", label: "Evidence Platform", icon: FileText, description: "M7 · Hashing · Tamper detection · Encryption · Versioning", short: "M7" },
   { id: "kg", label: "Knowledge Graph", icon: Network, description: "M6 · Graph traversal · Path finding · Centrality", short: "M6" },
   { id: "temporal", label: "Temporal Engine", icon: Clock, description: "M5 · Time travel · Version comparison · History replay", short: "M5" },
@@ -23,16 +24,17 @@ const TABS: Tab[] = [
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("evidence");
+  const [active, setActive] = React.useState<string>("intel");
 
   const childrenArray = React.Children.toArray(children);
-  const evidence = childrenArray[0] ?? null;
-  const kg = childrenArray[1] ?? null;
-  const temporal = childrenArray[2] ?? null;
-  const twin = childrenArray[3] ?? null;
-  const geo = childrenArray[4] ?? null;
-  const identity = childrenArray[5] ?? null;
-  const foundation = childrenArray[6] ?? null;
+  const intel = childrenArray[0] ?? null;
+  const evidence = childrenArray[1] ?? null;
+  const kg = childrenArray[2] ?? null;
+  const temporal = childrenArray[3] ?? null;
+  const twin = childrenArray[4] ?? null;
+  const geo = childrenArray[5] ?? null;
+  const identity = childrenArray[6] ?? null;
+  const foundation = childrenArray[7] ?? null;
 
   return (
     <div>
@@ -69,6 +71,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "intel" && intel}
         {active === "evidence" && evidence}
         {active === "kg" && kg}
         {active === "temporal" && temporal}
