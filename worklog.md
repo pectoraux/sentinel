@@ -641,3 +641,26 @@ Stage Summary:
 - Milestone 17 (Prediction Engine) is COMPLETE and browser-verified.
 - Delivered: Predicts illegal mining hotspots (spatial clustering + 8-factor Bayesian model) and future expansion (historical rate + 7-factor forecast). Each prediction includes: Probability (0-100% mining likelihood), Confidence (model certainty), and full Explainability (9-step reasoning chain: Spatial Clustering → AI Detection → Environmental Context → Satellite → Vulnerability → Accessibility → Governance → Probability → Conclusion). Expansion predictions include direction, radius, and timeframe. Uses real data from M4 (mines/rivers/forests), M6 (knowledge graph proximity), M13 (CV detections), M15 (fusion confidence), M16 (environmental risk).
 - Integrates: M4 Digital Twin (mines as cluster centers), M6 Knowledge Graph (spatial relationships), M13 Computer Vision (excavation detections), M15 Evidence Fusion (confidence), M16 Environmental Intelligence (risk scores), M12 Satellite (change detection).
+
+---
+Task ID: M18
+Agent: orchestrator
+Task: Milestone 18 — Digital Twin AI Copilot
+
+Work Log:
+- Extended Prisma schema with 2 models: CopilotConversation (userId, title, context JSON, messageCount) and CopilotMessage (conversationId, role, content, retrievedData JSON, referencedEntities JSON, referencedEvents JSON, model, processingMs).
+- Built CopilotService using REAL LLM via z-ai-web-dev-sdk:
+  - query(): Takes a natural language question, retrieves relevant platform data via keyword matching (mines, rivers, forests, events, predictions, hotspots, observations, fusions, satellite), constructs a context-rich prompt with real JSON data, calls zai.chat.completions.create() with a system prompt explaining the Sentinel platform + conversation history, returns the LLM's natural language answer with referenced entities/events and processing time. Saves both user and assistant messages to the conversation.
+  - retrieveContext(): Keyword-based data retrieval from 8 platform sources — twin entities (by name), mines, rivers, forests, fusion results (with source breakdown), hotspot predictions, environmental predictions, AI observations (with reasoning), intelligence events. Always includes a platform overview (total counts). Returns structured JSON summary.
+  - buildContextPrompt(): Constructs the LLM prompt by combining the user's question with the retrieved JSON data: "User Question: ... Platform Data Retrieved: {JSON} ... Based on the above real platform data, answer the user's question."
+  - getConversation(), listConversations(), summary().
+- Built 2 API routes: copilot/query (POST — real LLM query, auth-required), copilot/summary (GET).
+- UI: Built CopilotDashboard with chat interface — message history (user/assistant bubbles with processing time, entity/event references, retrieved data keys), input box with send button, 8 suggested queries ("Show illegal mining near Pra River.", "Why is this event high confidence?", "What's the risk to Atewa Forest?", etc.), loading spinner during LLM processing, "What I Can Do" capability cards (Query Digital Twin, Explain Confidence, Interpret Predictions, Summarize Events), KPI row (conversations, messages, avg response time, data sources).
+- Updated DashboardTabs to 18 tabs (AI Copilot default). Updated hero, header badge, footer, checklist.
+- `bun run lint` → 0 errors. `bun run test` → 60/60 pass.
+- Agent Browser: AI Copilot tab (default) renders chat interface with input, suggested queries. 18 tabs switch correctly. No errors.
+
+Stage Summary:
+- Milestone 18 (Digital Twin AI Copilot) is COMPLETE and browser-verified.
+- Delivered: Natural language interface to the Digital Twin using REAL LLM (z-ai-web-dev-sdk). Users can ask questions like "Show illegal mining near Pra River." or "Why is this event high confidence?" and the copilot retrieves relevant data from 8 platform sources (twin entities, intelligence events, CV detections, fusion results, environmental predictions, hotspot predictions, AI observations, satellite scenes), constructs a context-rich prompt, and uses the LLM to generate a natural language answer. Conversation history is maintained for multi-turn dialogue. Each response includes referenced entity IDs, event IDs, and a summary of retrieved data.
+- Integrates ALL prior milestones: M4 (twin entities), M8 (intelligence events), M13 (CV detections), M14 (AI observations), M15 (fusion results), M16 (environmental predictions), M17 (hotspot predictions), M12 (satellite scenes).

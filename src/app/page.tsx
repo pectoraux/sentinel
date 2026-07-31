@@ -55,6 +55,7 @@ import { ObservationDashboard } from "@/components/sentinel/ai-observations/obse
 import { FusionDashboard } from "@/components/sentinel/fusion/fusion-dashboard";
 import { PredictionDashboard } from "@/components/sentinel/predictions/prediction-dashboard";
 import { HotspotDashboard } from "@/components/sentinel/hotspots/hotspot-dashboard";
+import { CopilotDashboard } from "@/components/sentinel/copilot/copilot-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
 import { getEvidenceService, getCorroborationService } from "@/modules/evidence";
@@ -67,6 +68,7 @@ import { getObservationService } from "@/modules/ai-observations";
 import { getFusionService } from "@/modules/fusion";
 import { getPredictionService } from "@/modules/predictions";
 import { getHotspotService } from "@/modules/hotspots";
+import { getCopilotService } from "@/modules/copilot";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -99,6 +101,7 @@ export default async function DashboardPage() {
     fusionSummary,
     predictionSummary,
     hotspotSummary,
+    copilotSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -125,6 +128,7 @@ export default async function DashboardPage() {
     getFusionService().summary(),
     getPredictionService().summary(),
     getHotspotService().summary(),
+    getCopilotService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -206,7 +210,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M17 · Prediction Engine
+                  M18 · AI Copilot
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -235,7 +239,7 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Prediction Engine
+                Digital Twin AI Copilot
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                 Production trust system replacing reputation. Tracks accuracy, reliability,
@@ -257,7 +261,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M10: Prediction Engine (first child = first tab, default) === */}
+          {/* === M10: Digital Twin AI Copilot (first child = first tab, default) === */}
+          <CopilotDashboard initialSummary={copilotSummary} />
+
+          {/* === M17: Prediction Engine (second child = second tab) === */}
           <HotspotDashboard initialSummary={hotspotSummary} />
 
           {/* === M16: Environmental Intelligence (second child = second tab) === */}
@@ -572,12 +579,12 @@ export default async function DashboardPage() {
                     "M9: Independent Corroboration + Duplicate Detection",
                     "M9: Witness Confidence + Evidence Weighting",
                     "M9: 5-Tier System (Unverified→Confirmed)",
-                    "M10: Prediction Engine (8-Factor)",
+                    "M10: Digital Twin AI Copilot (8-Factor)",
                     "M10: Accuracy · Reliability · False Reports",
                     "M10: Evidence Quality · Contribution Quality · Impact",
                     "M10: Decay (90-day half-life) · Fraud Resistance",
-                    "M18: Intelligence Engine (next)",
-                    "M19: Predictive Analytics (next)",
+                    "M19: Intelligence Engine (next)",
+                    "M20: Predictive Analytics (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -596,13 +603,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M16 — Prediction Engine</span>
+            <span>Sentinel Platform · M16 — Digital Twin AI Copilot</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
-            <Link href="/api/v1/hotspots/summary" className="hover:text-foreground transition-colors">Hotspots</Link>
+            <Link href="/api/v1/copilot/summary" className="hover:text-foreground transition-colors">Copilot</Link>
             <Link href="/api/v1/intelligence/summary" className="hover:text-foreground transition-colors">Intel</Link>
             <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
             <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>

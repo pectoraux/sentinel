@@ -1733,3 +1733,50 @@ model HotspotPrediction {
   @@index([lat, lng])
   @@index([createdAt])
 }
+
+// =============================================================================
+// MILESTONE 18 — Digital Twin AI Copilot
+// =============================================================================
+// Natural language interface to the Digital Twin. Users ask questions like
+// "Show illegal mining near Pra River" or "Why is this event high confidence?"
+// and the copilot uses the LLM + real platform data to answer.
+// =============================================================================
+
+model CopilotConversation {
+  id              String   @id @default(cuid())
+  userId          String?
+  title           String   @default("New Conversation")
+  // context: JSON — what entities/events the conversation is about
+  context         String?  // JSON: { entityIds: [], eventIds: [], type: "" }
+  messageCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  messages        CopilotMessage[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model CopilotMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  // role: user | assistant
+  role            String
+  content         String
+  // context data retrieved for this query (JSON)
+  retrievedData   String?  // JSON: summary of data fetched from the platform
+  // entities referenced in the response
+  referencedEntities String? // JSON array of entity IDs
+  referencedEvents String?  // JSON array of event IDs
+  // model metadata
+  model           String   @default("llm-zai")
+  processingMs    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  conversation    CopilotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([role])
+  @@index([createdAt])
+}
