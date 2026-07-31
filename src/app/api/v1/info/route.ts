@@ -85,6 +85,13 @@ export const GET = withHandler(async () => {
             { path: "/api/v1/twin/kg/components", method: "GET", auth: false, description: "Connected components" },
             { path: "/api/v1/twin/kg/centrality", method: "GET", auth: false, description: "Degree centrality rankings" },
             { path: "/api/v1/twin/kg/templates", method: "GET", auth: false, description: "Relationship templates" },
+            // M7 — Evidence Platform
+            { path: "/api/v1/evidence/summary", method: "GET", auth: false, description: "Evidence aggregate metrics" },
+            { path: "/api/v1/evidence", method: "GET", auth: false, description: "List evidence (filter by type)" },
+            { path: "/api/v1/evidence", method: "POST", auth: true, permission: "identity:submit_verification", description: "Upload evidence" },
+            { path: "/api/v1/evidence/[id]", method: "GET", auth: false, description: "Evidence detail + versions" },
+            { path: "/api/v1/evidence/[id]/versions", method: "GET", auth: false, description: "Version history" },
+            { path: "/api/v1/evidence/[id]/verify", method: "POST", auth: false, description: "Verify hash chain (tamper detection)" },
           ],
         },
       ],

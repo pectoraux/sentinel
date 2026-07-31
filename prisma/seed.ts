@@ -1001,6 +1001,266 @@ async function seedTwinData() {
   const versionCount = await prisma.twinEntityVersion.count();
   const eventCount = await prisma.twinEvent.count();
   console.log(`[seed] Seeded ${TWIN_ENTITIES.length} twin entities, ${relCount} relationships, ${versionCount} versions, ${eventCount} events (temporally spread over 365 days).`);
+
+  console.log("[seed] Seeding M7 evidence data...");
+  await seedEvidenceData();
+}
+
+// ---------------------------------------------------------------------------
+// M7 — Evidence seed data
+// ---------------------------------------------------------------------------
+
+import { createHash } from "node:crypto";
+
+const SAMPLE_EVIDENCE = [
+  {
+    key: "evd-prestea-cyanide-001",
+    title: "Cyanide Spill — Drone Photo",
+    description: "Aerial photograph of cyanide-contaminated water flowing into the Pra River from the Prestea galamsey site.",
+    type: "image",
+    mediaType: "image/jpeg",
+    storageKey: "evidence/evd-prestea-cyanide-001/v1-photo.jpg",
+    sizeBytes: 2456789,
+    lat: 5.4310,
+    lng: -2.1440,
+    metadata: { device: "DJI Mavic 3M", resolution: "5280x2970", captured_at: "2024-07-28T10:30:00Z", photographer: "Kofi Mensah" },
+    twinEntityKey: "event-cyanide-spill-2024",
+    encrypted: false,
+    verified: true,
+    daysAgo: 6,
+  },
+  {
+    key: "evd-prestea-cyanide-002",
+    title: "Water Sample Lab Report",
+    description: "Laboratory analysis of water samples from the Pra River showing mercury and cyanide levels.",
+    type: "document",
+    mediaType: "application/pdf",
+    storageKey: "evidence/evd-prestea-cyanide-002/v1-report.pdf",
+    sizeBytes: 892341,
+    lat: 5.4310,
+    lng: -2.1440,
+    metadata: { lab: "Ghana EPA Lab", sample_id: "WS-2024-0728-03", mercury_ppm: 0.004, cyanide_ppm: 0.12, analyst: "Dr. Owusu" },
+    twinEntityKey: "event-cyanide-spill-2024",
+    encrypted: true,
+    verified: true,
+    daysAgo: 5,
+  },
+  {
+    key: "evd-obuasi-drone-survey",
+    title: "Obuasi Illegal Pit — Drone Video",
+    description: "4K video survey of the illegal mining pit within the AngloGold concession boundary.",
+    type: "video",
+    mediaType: "video/mp4",
+    storageKey: "evidence/evd-obuasi-drone-survey/v1-survey.mp4",
+    sizeBytes: 45678234,
+    lat: 6.2062,
+    lng: -1.6678,
+    metadata: { device: "DJI Mavic 3M", duration_sec: 342, resolution: "3840x2160", fps: 30, pilot: "Akua Adjei" },
+    twinEntityKey: "mine-obuasi-illegal",
+    encrypted: false,
+    verified: false,
+    daysAgo: 3,
+  },
+  {
+    key: "evd-prestea-audio-interview",
+    title: "Prestea Community Interview",
+    description: "Audio interview with Prestea community member about health impacts of mining pollution.",
+    type: "audio",
+    mediaType: "audio/mpeg",
+    storageKey: "evidence/evd-prestea-audio-interview/v1-interview.mp3",
+    sizeBytes: 5234567,
+    lat: 5.4300,
+    lng: -2.1400,
+    metadata: { duration_sec: 845, interviewee: "anonymous", language: "Twi", interviewer: "Ama Boateng" },
+    twinEntityKey: "community-prestea",
+    encrypted: true,
+    verified: true,
+    daysAgo: 4,
+  },
+  {
+    key: "evd-pra-river-gps-track",
+    title: "Pra River Survey GPS Track",
+    description: "GPS track of boat survey along the Pra River from Prestea to the confluence.",
+    type: "gps_track",
+    mediaType: "application/gpx+xml",
+    storageKey: "evidence/evd-pra-river-gps-track/v1-track.gpx",
+    sizeBytes: 45678,
+    lat: 5.2767,
+    lng: -1.8767,
+    metadata: { points: 1247, distance_km: 18.4, device: "Garmin GPSMAP 66s", surveyor: "Yaw Owusu" },
+    twinEntityKey: "river-pra-main",
+    encrypted: false,
+    verified: true,
+    daysAgo: 8,
+  },
+  {
+    key: "evd-atewa-satellite-2024",
+    title: "Atewa Forest — Satellite Change Detection",
+    description: "Sentinel-2 satellite imagery showing canopy loss in the northern sector of Atewa Forest Reserve.",
+    type: "image",
+    mediaType: "image/tiff",
+    storageKey: "evidence/evd-atewa-satellite-2024/v1-sentinel.tif",
+    sizeBytes: 12345678,
+    lat: 6.1667,
+    lng: -0.5500,
+    metadata: { satellite: "Sentinel-2", capture_date: "2024-06-15", resolution_m: 10, cloud_cover: 8, scene_id: "S2B_20240615_ATEWA" },
+    twinEntityKey: "forest-atewa",
+    encrypted: false,
+    verified: true,
+    daysAgo: 12,
+  },
+  {
+    key: "evd-prestea-inspection-log",
+    title: "Prestea Site Inspection Log",
+    description: "Field inspection log with findings, photos references, and GPS coordinates.",
+    type: "document",
+    mediaType: "application/pdf",
+    storageKey: "evidence/evd-prestea-inspection-log/v1-inspection.pdf",
+    sizeBytes: 234567,
+    lat: 5.4321,
+    lng: -2.1456,
+    metadata: { inspector: "Kofi Mensah", findings: "Active illegal mining, mercury use detected", outcome: "violation_confirmed", evidence_refs: ["IMG-001", "IMG-002"] },
+    twinEntityKey: "inspection-prestea-2024-06",
+    encrypted: false,
+    verified: true,
+    daysAgo: 45,
+  },
+  {
+    key: "evd-pra-sensor-log",
+    title: "Pra River Sensor S1 — Water Quality Log",
+    description: "Sensor log from the AquaScan Pro sensor showing 7-day water quality measurements.",
+    type: "sensor_log",
+    mediaType: "text/csv",
+    storageKey: "evidence/evd-pra-sensor-log/v1-log.csv",
+    sizeBytes: 34567,
+    lat: 5.2800,
+    lng: -1.8700,
+    metadata: { sensor: "AquaScan Pro", serial: "AS-2024-001", parameters: ["ph", "mercury", "cyanide", "turbidity"], interval_min: 15 },
+    twinEntityKey: "sensor-pra-s1",
+    encrypted: false,
+    verified: false,
+    daysAgo: 2,
+  },
+];
+
+async function seedEvidenceData() {
+  const now = new Date();
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  // Build a lookup from twin entity key to id
+  const twinEntities = await prisma.twinEntity.findMany({ select: { id: true, key: true } });
+  const twinKeyToId = new Map(twinEntities.map((e) => [e.key, e.id]));
+
+  // Get admin user for uploadedById
+  const admin = await prisma.user.findUnique({ where: { email: "admin@sentinel.africa" } });
+
+  let count = 0;
+  for (const ev of SAMPLE_EVIDENCE) {
+    // Generate fake content hash (deterministic from key)
+    const contentHash = createHash("sha256").update(ev.key + ev.storageKey).digest("hex");
+    const metadataHash = createHash("sha256").update(JSON.stringify(ev.metadata)).digest("hex");
+    const combinedHash = createHash("sha256").update(contentHash + metadataHash + "GENESIS").digest("hex");
+    const createdAt = daysAgo(ev.daysAgo);
+
+    const evidence = await prisma.evidence.upsert({
+      where: { key: ev.key },
+      create: {
+        key: ev.key,
+        title: ev.title,
+        description: ev.description,
+        type: ev.type,
+        mediaType: ev.mediaType,
+        storageKey: ev.storageKey,
+        storageProvider: "local",
+        sizeBytes: ev.sizeBytes,
+        checksum: contentHash,
+        currentHash: combinedHash,
+        previousHash: null,
+        encrypted: ev.encrypted,
+        encryptionKeyId: ev.encrypted ? `evidence-key-${ev.key}` : null,
+        lat: ev.lat,
+        lng: ev.lng,
+        metadata: JSON.stringify(ev.metadata),
+        currentVersion: 1,
+        uploadedById: admin?.id,
+        twinEntityId: ev.twinEntityKey ? twinKeyToId.get(ev.twinEntityKey) : null,
+        verified: ev.verified,
+        verifiedById: ev.verified ? admin?.id : null,
+        verifiedAt: ev.verified ? createdAt : null,
+        chainValid: true,
+        createdAt,
+        updatedAt: createdAt,
+      },
+      update: {},
+    });
+
+    // Create version 1
+    await prisma.evidenceVersion.create({
+      data: {
+        evidenceId: evidence.id,
+        version: 1,
+        snapshot: JSON.stringify({ ...ev, version: 1 }),
+        contentHash,
+        metadataHash,
+        combinedHash,
+        previousHash: null,
+        changeReason: "Initial upload",
+        storageKey: ev.storageKey,
+        sizeBytes: ev.sizeBytes,
+        changedById: admin?.id,
+        validFrom: createdAt,
+      },
+    }).catch(() => {});
+
+    count++;
+  }
+
+  // Add a v2 to the first evidence item (to show versioning)
+  const firstEvidence = await prisma.evidence.findUnique({ where: { key: "evd-prestea-cyanide-001" } });
+  if (firstEvidence) {
+    const v2ContentHash = createHash("sha256").update(firstEvidence.key + "v2-enhanced").digest("hex");
+    const v2MetadataHash = createHash("sha256").update(JSON.stringify({ ...firstEvidence.metadata, enhanced: true })).digest("hex");
+    const v2CombinedHash = createHash("sha256").update(v2ContentHash + v2MetadataHash + firstEvidence.currentHash).digest("hex");
+    const v2Time = daysAgo(2);
+
+    // Close v1
+    await prisma.evidenceVersion.updateMany({
+      where: { evidenceId: firstEvidence.id, version: 1 },
+      data: { validTo: v2Time },
+    });
+
+    await prisma.evidenceVersion.create({
+      data: {
+        evidenceId: firstEvidence.id,
+        version: 2,
+        snapshot: JSON.stringify({ ...firstEvidence, version: 2, enhanced: true }),
+        contentHash: v2ContentHash,
+        metadataHash: v2MetadataHash,
+        combinedHash: v2CombinedHash,
+        previousHash: firstEvidence.currentHash,
+        changeReason: "Enhanced resolution re-upload",
+        storageKey: `evidence/evd-prestea-cyanide-001/v2-photo-enhanced.jpg`,
+        sizeBytes: 2890123,
+        changedById: admin?.id,
+        validFrom: v2Time,
+      },
+    });
+
+    await prisma.evidence.update({
+      where: { id: firstEvidence.id },
+      data: {
+        currentVersion: 2,
+        storageKey: `evidence/evd-prestea-cyanide-001/v2-photo-enhanced.jpg`,
+        sizeBytes: 2890123,
+        checksum: v2ContentHash,
+        currentHash: v2CombinedHash,
+        previousHash: firstEvidence.currentHash,
+        updatedAt: v2Time,
+      },
+    });
+  }
+
+  console.log(`[seed] Seeded ${count} evidence items (images, video, audio, documents, GPS, sensor logs) with hash chains and version history.`);
 }
 
 main()

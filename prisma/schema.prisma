@@ -758,3 +758,106 @@ model TwinEvent {
   @@index([severity])
   @@index([timestamp])
 }
+
+// =============================================================================
+// MILESTONE 7 — Evidence Platform
+// =============================================================================
+// Universal evidence service supporting images, video, audio, documents, GPS
+// tracks, and arbitrary metadata. Every evidence item is:
+//   - Hashed (SHA-256 content fingerprint)
+//   - Hash-chained (each version references the previous hash → tamper-evident)
+//   - Optionally encrypted (at-rest encryption key stored separately)
+//   - Versioned (immutable version snapshots, same temporal model as Twin)
+//   - GPS-tagged (lat/lng + optional GeoJSON track)
+//   - Metadata-rich (flexible JSON for type-specific attributes)
+// =============================================================================
+
+model Evidence {
+  id              String   @id @default(cuid())
+  key             String   @unique // human-readable key, e.g. "evd-prestea-cyanide-001"
+  title           String
+  description     String?
+  // type: image | video | audio | document | gps_track | sensor_log | report | other
+  type            String
+  // mediaType: MIME type (image/jpeg, video/mp4, audio/mpeg, application/pdf, ...)
+  mediaType       String
+  // storageKey: object storage key (StoredObject.key or external URL)
+  storageKey      String
+  storageProvider String   @default("local")
+  // sizeBytes: file size
+  sizeBytes       Int      @default(0)
+  // checksum: SHA-256 hash of the original content (content fingerprint)
+  checksum        String
+  // currentHash: hash of the current version's content + metadata (hash chain head)
+  currentHash     String
+  // previousHash: hash of the previous version (hash chain link)
+  previousHash    String?
+  // encryption: encryption status + key reference
+  encrypted       Boolean  @default(false)
+  encryptionKeyId String?  // reference to key in the secrets manager (never store the key itself)
+  // GPS: capture location
+  lat             Float?
+  lng             Float?
+  // geojson: optional GeoJSON track (for GPS tracks) or area
+  geojson         String?
+  // metadata: flexible JSON (exif, duration, resolution, deviceInfo, etc.)
+  metadata        String?
+  // currentVersion: monotonically increasing version number
+  currentVersion  Int      @default(1)
+  // ownership + provenance
+  uploadedById    String?
+  organizationId  String?
+  // twinEntityId: optional link to a Digital Twin entity (e.g. inspection evidence)
+  twinEntityId    String?
+  // verification status
+  verified        Boolean  @default(false)
+  verifiedById    String?
+  verifiedAt      DateTime?
+  // chain integrity
+  chainValid      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  versions        EvidenceVersion[]
+
+  @@index([type])
+  @@index([mediaType])
+  @@index([uploadedById])
+  @@index([organizationId])
+  @@index([twinEntityId])
+  @@index([verified])
+  @@index([lat, lng])
+}
+
+model EvidenceVersion {
+  id              String   @id @default(cuid())
+  evidenceId      String
+  version         Int
+  // snapshot: full JSON snapshot of the evidence state at this version
+  snapshot        String
+  // contentHash: SHA-256 of the content at this version
+  contentHash     String
+  // metadataHash: SHA-256 of the metadata at this version
+  metadataHash    String
+  // combinedHash: SHA-256(contentHash + metadataHash + previousHash) — the chain link
+  combinedHash    String
+  // previousHash: combinedHash of the previous version
+  previousHash    String?
+  // changeReason: why this version was created
+  changeReason    String?
+  // diff: JSON describing what changed
+  diff            String?
+  // storageKey: content storage key at this version (may differ if re-uploaded)
+  storageKey      String
+  sizeBytes       Int
+  changedById     String?
+  validFrom       DateTime @default(now())
+  validTo         DateTime?
+  createdAt       DateTime @default(now())
+
+  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([evidenceId, version])
+  @@index([evidenceId])
+  @@index([validFrom])
+}

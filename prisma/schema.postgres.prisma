@@ -732,3 +732,73 @@ model TwinEvent {
   @@index([severity])
   @@index([timestamp])
 }
+
+// =============================================================================
+// MILESTONE 7 — Evidence Platform
+// =============================================================================
+
+model Evidence {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String?
+  type            String
+  mediaType       String
+  storageKey      String
+  storageProvider String   @default("local")
+  sizeBytes       Int      @default(0)
+  checksum        String
+  currentHash     String
+  previousHash    String?
+  encrypted       Boolean  @default(false)
+  encryptionKeyId String?
+  lat             Float?
+  lng             Float?
+  geojson         String?
+  metadata        String?
+  currentVersion  Int      @default(1)
+  uploadedById    String?
+  organizationId  String?
+  twinEntityId    String?
+  verified        Boolean  @default(false)
+  verifiedById    String?
+  verifiedAt      DateTime?
+  chainValid      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  versions        EvidenceVersion[]
+
+  @@index([type])
+  @@index([mediaType])
+  @@index([uploadedById])
+  @@index([organizationId])
+  @@index([twinEntityId])
+  @@index([verified])
+  @@index([lat, lng])
+}
+
+model EvidenceVersion {
+  id              String   @id @default(cuid())
+  evidenceId      String
+  version         Int
+  snapshot        String
+  contentHash     String
+  metadataHash    String
+  combinedHash    String
+  previousHash    String?
+  changeReason    String?
+  diff            String?
+  storageKey      String
+  sizeBytes       Int
+  changedById     String?
+  validFrom       DateTime @default(now())
+  validTo         DateTime?
+  createdAt       DateTime @default(now())
+
+  evidence Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([evidenceId, version])
+  @@index([evidenceId])
+  @@index([validFrom])
+}

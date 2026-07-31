@@ -44,14 +44,16 @@ import { GeospatialDashboard } from "@/components/sentinel/geo/geospatial-dashbo
 import { TwinDashboard } from "@/components/sentinel/twin/twin-dashboard";
 import { TemporalDashboard } from "@/components/sentinel/twin/temporal-dashboard";
 import { KnowledgeGraphDashboard } from "@/components/sentinel/twin/knowledge-graph-dashboard";
+import { EvidenceDashboard } from "@/components/sentinel/evidence/evidence-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE, getTemporalService, getKnowledgeGraphService } from "@/modules/twin";
+import { getEvidenceService } from "@/modules/evidence";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Fetch ALL dashboard data server-side in parallel (M1 + M2 + M3 + M4 + M5 + M6).
+  // Fetch ALL dashboard data server-side in parallel (M1–M7).
   const [
     health,
     flags,
@@ -67,6 +69,7 @@ export default async function DashboardPage() {
     twinGraphRaw,
     temporalSummary,
     kgAnalytics,
+    evidenceSummary,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -82,6 +85,7 @@ export default async function DashboardPage() {
     getTwinSummaryService().graph({ limit: 100 }),
     getTemporalService().temporalSummary(),
     getKnowledgeGraphService().analytics(),
+    getEvidenceService().summary(),
   ]);
 
   // Transform KG graph nodes with type colors
@@ -163,7 +167,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M6 · Knowledge Graph
+                  M7 · Evidence
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -192,12 +196,13 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Knowledge Graph
+                Evidence Platform
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Everything linked. River → Community, Mine → River, Forest → Watershed,
-                Inspection → Mine, Satellite Image → Event. Graph traversal, shortest path
-                finding, connected components, and centrality analytics over the Digital Twin.
+                Universal evidence service for images, video, audio, documents, GPS tracks,
+                and sensor logs. Every item is SHA-256 hashed, hash-chained for tamper
+                detection, optionally encrypted with AES-256-GCM, GPS-tagged, and fully
+                versioned with immutable history.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -212,16 +217,19 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M6: Knowledge Graph (first child = first tab, default) === */}
+          {/* === M7: Evidence Platform (first child = first tab, default) === */}
+          <EvidenceDashboard initialSummary={evidenceSummary} />
+
+          {/* === M6: Knowledge Graph (second child = second tab) === */}
           <KnowledgeGraphDashboard initialAnalytics={kgAnalytics} initialGraph={kgGraph} />
 
-          {/* === M5: Temporal Engine (second child = second tab) === */}
+          {/* === M5: Temporal Engine (third child = third tab) === */}
           <TemporalDashboard initialSummary={temporalSummary} />
 
-          {/* === M4: Digital Twin (third child = third tab) === */}
+          {/* === M4: Digital Twin (fourth child = fourth tab) === */}
           <TwinDashboard initialSummary={twinSummary} initialGraph={twinGraph} />
 
-          {/* === M3: Geospatial (fourth child = fourth tab) === */}
+          {/* === M3: Geospatial (fifth child = fifth tab) === */}
           <GeospatialDashboard
             initialSummary={geoSummary}
             initialPois={geoPois}
@@ -229,10 +237,10 @@ export default async function DashboardPage() {
             initialLayers={geoLayers}
           />
 
-          {/* === M2: Identity & Trust (fifth child = fifth tab) === */}
+          {/* === M2: Identity & Trust (sixth child = sixth tab) === */}
           <IdentityDashboard initial={identitySummaryRaw} />
 
-          {/* === M1: Foundation (sixth child = sixth tab) === */}
+          {/* === M1: Foundation (seventh child = seventh tab) === */}
           <div>
             {/* KPI row */}
             <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -482,8 +490,12 @@ export default async function DashboardPage() {
                     "M6: Shortest Path · Connected Components",
                     "M6: Degree Centrality · Relationship Matrix",
                     "M6: Typed Templates (River→Community, Mine→River)",
-                    "M7: Intelligence Engine (next)",
-                    "M8: Community Reporting (next)",
+                    "M7: Universal Evidence (Image/Video/Audio/Doc/GPS)",
+                    "M7: SHA-256 Hashing + Hash Chain Tamper Detection",
+                    "M7: AES-256-GCM Encryption + KMS Keys",
+                    "M7: GPS Tagging + Metadata + Version History",
+                    "M8: Intelligence Engine (next)",
+                    "M9: Community Reporting (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -502,12 +514,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M6 — Knowledge Graph</span>
+            <span>Sentinel Platform · M7 — Evidence</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/evidence/summary" className="hover:text-foreground transition-colors">Evidence</Link>
             <Link href="/api/v1/twin/kg/analytics" className="hover:text-foreground transition-colors">KG</Link>
             <Link href="/api/v1/twin/temporal/summary" className="hover:text-foreground transition-colors">Temporal</Link>
             <Link href="/api/v1/twin/summary" className="hover:text-foreground transition-colors">Twin</Link>
