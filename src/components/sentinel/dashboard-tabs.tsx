@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map } from "lucide-react";
+import { ShieldCheck, Users, Map, Box } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -13,18 +13,20 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: "twin", label: "Digital Twin", icon: Box, description: "M4 · Versioned entities · Relationships · History", short: "M4" },
   { id: "geo", label: "Geospatial", icon: Map, description: "M3 · GIS engine · Maps · Layers · Spatial queries", short: "M3" },
   { id: "identity", label: "Identity & Trust", icon: Users, description: "M2 · Organizations · Devices · Trust", short: "M2" },
   { id: "foundation", label: "Platform Foundation", icon: ShieldCheck, description: "M1 · Architecture & subsystems", short: "M1" },
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("geo");
+  const [active, setActive] = React.useState<string>("twin");
 
   const childrenArray = React.Children.toArray(children);
-  const geo = childrenArray[0] ?? null;
-  const identity = childrenArray[1] ?? null;
-  const foundation = childrenArray[2] ?? null;
+  const twin = childrenArray[0] ?? null;
+  const geo = childrenArray[1] ?? null;
+  const identity = childrenArray[2] ?? null;
+  const foundation = childrenArray[3] ?? null;
 
   return (
     <div>
@@ -61,6 +63,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
+        {active === "twin" && twin}
         {active === "geo" && geo}
         {active === "identity" && identity}
         {active === "foundation" && foundation}

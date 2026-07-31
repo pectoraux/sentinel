@@ -634,3 +634,127 @@ model GeoTileManifest {
   @@index([layerId, z])
   @@index([status])
 }
+
+// =============================================================================
+// MILESTONE 4 — Digital Twin Core
+// =============================================================================
+// Every environmental object becomes a versioned, related, historical entity.
+// Rather than 11 rigid tables, we use a UNIFIED TwinEntity model with a type
+// discriminator — this is the canonical Digital Twin architecture:
+//
+//   TwinEntity          — the live object (River, Road, Mine, Forest, ...)
+//   TwinEntityVersion   — immutable versioned snapshots (full audit trail)
+//   TwinRelationship    — graph edges between entities (near, contains, affects)
+//   TwinEvent           — timeline of events/state changes per entity
+//
+// Entity types: river, road, mine, forest, community, inspection, event,
+// concession, protected_area, equipment, historical_imagery
+// =============================================================================
+
+model TwinEntity {
+  id              String   @id @default(cuid())
+  key             String   @unique // human-readable unique key, e.g. "river-pra-main"
+  type            String   // river | road | mine | forest | community | inspection | event | concession | protected_area | equipment | historical_imagery
+  name            String
+  description     String?
+  status          String   @default("active") // active | monitored | closed | degraded | historical | planned
+  // geojson: optional GeoJSON geometry (Point, LineString, or Polygon)
+  geojson         String?
+  lat             Float?
+  lng             Float?
+  // metadata: flexible JSON — type-specific attributes (flow_rate for rivers,
+  // capacity for mines, population for communities, capture_date for imagery, etc.)
+  metadata        String?
+  // currentVersion: monotonically increasing version number
+  currentVersion  Int      @default(1)
+  // organizationId: optional owning org (for concessions, equipment, etc.)
+  organizationId  String?
+  country         String?
+  region          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  versions        TwinEntityVersion[]
+  events          TwinEvent[]
+  // Relationships — both outgoing (this → other) and incoming (other → this)
+  relationshipsFrom TwinRelationship[] @relation("RelFrom")
+  relationshipsTo   TwinRelationship[] @relation("RelTo")
+
+  @@index([type])
+  @@index([status])
+  @@index([country])
+  @@index([organizationId])
+  @@index([lng, lat])
+}
+
+model TwinEntityVersion {
+  id              String   @id @default(cuid())
+  entityId        String
+  version         Int      // version number (1, 2, 3, ...)
+  // snapshot: full JSON snapshot of the entity state at this version
+  snapshot        String
+  // changeReason: why this version was created (human-readable)
+  changeReason    String?
+  // diff: JSON describing what changed from the previous version
+  diff            String?
+  changedById     String?
+  validFrom       DateTime @default(now())
+  validTo         DateTime?
+  createdAt       DateTime @default(now())
+
+  entity TwinEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, version])
+  @@index([entityId])
+  @@index([validFrom])
+}
+
+model TwinRelationship {
+  id              String   @id @default(cuid())
+  fromEntityId    String
+  toEntityId      String
+  // type: near | contains | within | connects_to | affects | monitors | supplies | borders | upstream | downstream | depends_on | threatens
+  type            String
+  // strength: 0.0–1.0 for weighted relationships (e.g. proximity strength)
+  strength        Float    @default(1.0)
+  // metadata: JSON — relationship-specific data (distance_m, flow_direction, etc.)
+  metadata        String?
+  // bidirectional: if true, the relationship is symmetric (A↔B)
+  bidirectional   Boolean  @default(false)
+  validFrom       DateTime @default(now())
+  validTo         DateTime?
+  createdAt       DateTime @default(now())
+
+  fromEntity TwinEntity @relation("RelFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntity   TwinEntity @relation("RelTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([fromEntityId, toEntityId, type])
+  @@index([fromEntityId])
+  @@index([toEntityId])
+  @@index([type])
+}
+
+model TwinEvent {
+  id              String   @id @default(cuid())
+  entityId        String
+  // type: created | updated | status_changed | inspected | incident | restored | depleted | expanded | reported | verified
+  type            String
+  title           String
+  description     String?
+  // severity: info | low | medium | high | critical
+  severity        String   @default("info")
+  // payload: JSON — event-specific data
+  payload         String?
+  // source: who/what triggered the event (user id, system, sensor, satellite)
+  source          String?
+  sourceType      String   @default("system") // user | system | sensor | satellite | report
+  timestamp       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  entity TwinEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+  @@index([type])
+  @@index([severity])
+  @@index([timestamp])
+}

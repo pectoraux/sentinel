@@ -41,13 +41,15 @@ import { HealthLiveView } from "@/components/sentinel/health-live-view";
 import { DashboardTabs } from "@/components/sentinel/dashboard-tabs";
 import { IdentityDashboard } from "@/components/sentinel/identity-dashboard";
 import { GeospatialDashboard } from "@/components/sentinel/geo/geospatial-dashboard";
+import { TwinDashboard } from "@/components/sentinel/twin/twin-dashboard";
 import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
+import { getTwinSummaryService, getTwinEntityService, ENTITY_TYPE_CATALOGUE } from "@/modules/twin";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Fetch ALL dashboard data server-side in parallel (M1 + M2 + M3).
+  // Fetch ALL dashboard data server-side in parallel (M1 + M2 + M3 + M4).
   const [
     health,
     flags,
@@ -59,6 +61,8 @@ export default async function DashboardPage() {
     geoPoisRaw,
     geoRegionsRaw,
     geoLayersRaw,
+    twinSummary,
+    twinGraphRaw,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -70,7 +74,19 @@ export default async function DashboardPage() {
     getPOIService().list({ limit: 500 }),
     getRegionService().list(),
     getLayerService().list(),
+    getTwinSummaryService().summary(),
+    getTwinSummaryService().graph({ limit: 100 }),
   ]);
+
+  // Transform twin graph nodes with type colors
+  const twinGraph = {
+    nodes: twinGraphRaw.nodes.map((n) => ({
+      ...n,
+      color: ENTITY_TYPE_CATALOGUE.find((t) => t.type === n.type)?.color ?? "#6b7280",
+    })),
+    edges: twinGraphRaw.edges,
+    stats: twinGraphRaw.stats,
+  };
 
   // Transform geo data for the map client component
   const geoPois = geoPoisRaw.pois.map((p) => ({
@@ -131,7 +147,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M3 · Geospatial
+                  M4 · Digital Twin
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -160,12 +176,13 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Geospatial Platform
+                Digital Twin Core
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Full GIS engine: PostGIS spatial queries, Web Mercator map rendering, layer
-                management, tile math (XYZ + quadkeys), coordinate transforms, distance &amp;
-                polygon queries — the geospatial foundation for environmental intelligence.
+                Every environmental object becomes a versioned, related, historical entity —
+                rivers, roads, mines, forests, communities, concessions, protected areas,
+                equipment, inspections, events, and historical imagery — with full version
+                history, graph relationships, and event timelines.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -180,7 +197,10 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M3: Geospatial (first child = first tab, default) === */}
+          {/* === M4: Digital Twin (first child = first tab, default) === */}
+          <TwinDashboard initialSummary={twinSummary} initialGraph={twinGraph} />
+
+          {/* === M3: Geospatial (second child = second tab) === */}
           <GeospatialDashboard
             initialSummary={geoSummary}
             initialPois={geoPois}
@@ -188,15 +208,15 @@ export default async function DashboardPage() {
             initialLayers={geoLayers}
           />
 
-          {/* === M2: Identity & Trust (second child = second tab) === */}
+          {/* === M2: Identity & Trust (third child = third tab) === */}
           <IdentityDashboard initial={identitySummaryRaw} />
 
-          {/* === M1: Foundation (third child = third tab) === */}
+          {/* === M1: Foundation (fourth child = fourth tab) === */}
           <div>
             {/* KPI row */}
             <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <Kpi icon={Boxes} label="Subsystems" value={String(subsystems.length)} hint="operational" />
-              <Kpi icon={Layers} label="Bounded Contexts" value="5" hint="iam · audit · flags · identity · geo" />
+              <Kpi icon={Layers} label="Bounded Contexts" value="6" hint="iam · audit · flags · identity · geo · twin" />
               <Kpi icon={KeyRound} label="RBAC Roles" value={String(roles.length)} hint="seeded" />
               <Kpi icon={Flag} label="Feature Flags" value={String(flags.length)} hint={`${flags.filter((f) => f.enabled).length} active`} />
               <Kpi icon={GitBranch} label="Outbox Pending" value={String(outboxPending)} hint="events" />
@@ -429,8 +449,12 @@ export default async function DashboardPage() {
                     "M3: Map Rendering · Layers · Tiles",
                     "M3: Coordinate Transforms · Quadkeys",
                     "M3: Distance · Polygon · Nearest-Neighbor",
-                    "M4: Intelligence Engine (next)",
-                    "M5: Digital Twin (next)",
+                    "M4: Versioned Entities (River/Road/Mine/Forest)",
+                    "M4: Graph Relationships (affects/contains/monitors)",
+                    "M4: Event History Timeline",
+                    "M4: Historical Imagery & Change Detection",
+                    "M5: Intelligence Engine (next)",
+                    "M6: Community Reporting (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -449,12 +473,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M3 — Geospatial</span>
+            <span>Sentinel Platform · M4 — Digital Twin</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/twin/summary" className="hover:text-foreground transition-colors">Twin</Link>
             <Link href="/api/v1/geo/summary" className="hover:text-foreground transition-colors">Geo</Link>
             <Link href="/api/v1/identity-summary" className="hover:text-foreground transition-colors">Identity</Link>
             <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Secrets redacted</span>

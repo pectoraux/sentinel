@@ -151,3 +151,35 @@ Stage Summary:
 - Milestone 3 (Geospatial Platform) is COMPLETE and browser-verified.
 - Delivered: PostGIS schema + spatial functions (production), TypeScript spatial engine (dev) with Haversine distance, point-in-polygon (ray-casting), k-d tree nearest-neighbor, coordinate transforms (WGS84↔Mercator↔tile↔quadkey↔MGRS), polygon area/centroid, great-circle interpolation. Map rendering with canvas-based Web Mercator projection, pan/zoom, POI markers, polygon regions, grid/tile overlays, layer system. 29 real Ghana mining-site POIs + 6 polygon regions seeded. 10 API routes with spatial query support.
 - The GIS engine is designed so M4 (Intelligence) can geo-reference detection results, M5 (Digital Twin) can render simulation overlays, and M6 (Community) can submit geo-tagged reports — all through the same spatial query API.
+
+---
+Task ID: M4
+Agent: orchestrator
+Task: Milestone 4 — Digital Twin Core
+
+Work Log:
+- Extended Prisma schema (both SQLite + PostgreSQL) with 4 new models: TwinEntity (unified entity with type discriminator, versioning, geojson, metadata), TwinEntityVersion (immutable versioned snapshots with diff), TwinRelationship (graph edges with type/strength/bidirectional), TwinEvent (timeline with severity/source/sourceType). Added reverse relations to TwinEntity for both outgoing and incoming relationships.
+- Built Twin bounded context (src/modules/twin/):
+  - Domain/entity-types.ts: 11-entity-type catalogue (river, road, mine, forest, community, inspection, event, concession, protected_area, equipment, historical_imagery) each with label, icon, color, description, defaultMetadataSchema, defaultRelationships. 12 relationship types (near, contains, within, connects_to, affects, monitors, supplies, borders, upstream, downstream, depends_on, threatens) with bidirectional flags.
+  - Domain/entities/twin-entity.ts: TwinEntity aggregate root with versioning logic — update() produces a diff + increments version, restoreToVersion() creates a new version from a past snapshot (doesn't overwrite history), toSnapshot() serializes current state. Enforces monotonic versioning invariant.
+  - Domain/events/twin-events.ts: domain events for created/updated/restored/relationship.created/event.recorded — all flow to the transactional outbox.
+  - Application/services: TwinEntityService (CRUD + versioning + restore + getVersions + getVersionDetail — every update creates an immutable snapshot with diff), RelationshipService (graph edges CRUD), EventService (timeline CRUD), TwinSummaryService (aggregate metrics + graph export as nodes+edges).
+- Built 10 API routes under /api/v1/twin/: summary (public), entities (GET list, POST create), entities/[id] (GET detail with versions+events+relationships, PATCH update creates new version), entities/[id]/versions (GET list, POST restore), entities/[id]/history (GET timeline), relationships (GET list, POST create), graph (GET nodes+edges for visualization). All public endpoints return 200, auth-gated return 401.
+- Seed: 27 twin entities across all 11 types (4 rivers: Pra, Ankobra, Offin, Birim; 3 mines: Prestea, Obuasi, Dunkwa; 3 communities: Prestea, Obuasi, Dunkwa; 2 forests: Atewa, Tano Offin; 2 concessions: AngloGold, Gold Fields; 2 protected areas: Atewa Sanctuary, Pra Basin; 2 equipment: sensor + drone; 3 historical imagery: Prestea 2020/2024, Atewa 2022; 2 events: cyanide spill, forest clearing; 2 inspections: Prestea, Obuasi). 26 relationships (mine→river affects, concession→mine contains, community→river depends_on, sensor→river monitors, imagery→mine monitors, event→river affects, etc.). 28 versions (Prestea mine has v2 showing expansion detection). 28 events (creation + satellite-detected expansion).
+- UI: Built EntityGraph component — canvas-based force-directed graph with repulsion + attraction + centering forces, nodes colored by entity type and sized by relationship degree, edges colored by relationship type with arrowheads for directed edges, drag-to-reposition, click-to-select, hover tooltips. Built TwinDashboard component: 6 KPIs (entities, versions, relationships, events, critical events, active entities), interactive force-directed entity graph, entity detail panel (metadata + outgoing/incoming relationships + recent events + version count), entity distribution chart, event timeline with severity colors. Auto-refreshes every 30s.
+- Updated DashboardTabs to 4 tabs (Digital Twin default, Geospatial, Identity & Trust, Platform Foundation). Updated hero, header badge, footer, checklist, API info directory.
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification (single session):
+  • All 4 twin API endpoints return HTTP 200.
+  • twin/summary: 27 entities, 28 versions, 26 relationships, 28 events across all 11 types.
+  • twin/graph: 27 nodes, 26 edges.
+  • Digital Twin tab (default): canvas force-directed graph renders, Entity Detail panel, Event Timeline, Entity Distribution all visible. 4 tabs present.
+  • Tab switching works all 4 ways (Digital Twin → Geospatial → Identity → Foundation → Digital Twin).
+  • Foundation tab shows "Versioned Entities" in checklist.
+  • Responsive: no horizontal scroll at 390px. No console errors.
+
+Stage Summary:
+- Milestone 4 (Digital Twin Core) is COMPLETE and browser-verified.
+- Delivered: Unified TwinEntity model where every environmental object (River, Road, Mine, Forest, Community, Inspection, Event, Concession, Protected Area, Equipment, Historical Imagery) becomes a versioned, related, historical entity. Every entity has: Versioning (immutable snapshots with diffs, restore creates new version), Relationships (12-type graph: affects/contains/monitors/depends_on/threatens/upstream/downstream...), History (event timeline with severity/source), Metadata (flexible JSON with type-specific schema).
+- 27 real Ghana entities seeded with 26 graph relationships + 28 versioned snapshots + 28 timeline events.
+- The Digital Twin is designed so M5 (Intelligence) can create detection events that update twin entities (new versions), M6 (Community) can submit reports that become twin events, and the simulation engine can project future states onto the versioned entity model.

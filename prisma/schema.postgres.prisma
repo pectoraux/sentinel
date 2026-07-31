@@ -637,3 +637,98 @@ model GeoTileManifest {
   @@index([layerId, z])
   @@index([status])
 }
+
+// =============================================================================
+// MILESTONE 4 — Digital Twin Core
+// =============================================================================
+
+model TwinEntity {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  type            String
+  name            String
+  description     String?
+  status          String   @default("active")
+  geojson         String?
+  lat             Float?
+  lng             Float?
+  metadata        String?
+  currentVersion  Int      @default(1)
+  organizationId  String?
+  country         String?
+  region          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  versions        TwinEntityVersion[]
+  events          TwinEvent[]
+  relationshipsFrom TwinRelationship[] @relation("RelFrom")
+  relationshipsTo   TwinRelationship[] @relation("RelTo")
+
+  @@index([type])
+  @@index([status])
+  @@index([country])
+  @@index([organizationId])
+  @@index([lng, lat])
+}
+
+model TwinEntityVersion {
+  id              String   @id @default(cuid())
+  entityId        String
+  version         Int
+  snapshot        String
+  changeReason    String?
+  diff            String?
+  changedById     String?
+  validFrom       DateTime @default(now())
+  validTo         DateTime?
+  createdAt       DateTime @default(now())
+
+  entity TwinEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, version])
+  @@index([entityId])
+  @@index([validFrom])
+}
+
+model TwinRelationship {
+  id              String   @id @default(cuid())
+  fromEntityId    String
+  toEntityId      String
+  type            String
+  strength        Float    @default(1.0)
+  metadata        String?
+  bidirectional   Boolean  @default(false)
+  validFrom       DateTime @default(now())
+  validTo         DateTime?
+  createdAt       DateTime @default(now())
+
+  fromEntity TwinEntity @relation("RelFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntity   TwinEntity @relation("RelTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([fromEntityId, toEntityId, type])
+  @@index([fromEntityId])
+  @@index([toEntityId])
+  @@index([type])
+}
+
+model TwinEvent {
+  id              String   @id @default(cuid())
+  entityId        String
+  type            String
+  title           String
+  description     String?
+  severity        String   @default("info")
+  payload         String?
+  source          String?
+  sourceType      String   @default("system")
+  timestamp       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  entity TwinEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+  @@index([type])
+  @@index([severity])
+  @@index([timestamp])
+}
