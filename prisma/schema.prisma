@@ -2607,3 +2607,172 @@ model AnalyticsSnapshot {
   @@index([snapshotDate])
   @@index([computedAt])
 }
+
+// =============================================================================
+// MILESTONE 25 — Developer Platform
+// =============================================================================
+// Exposes the Sentinel platform to third-party developers via:
+//   1. REST API       — versioned, documented, API-key authenticated
+//   2. GraphQL        — flexible query language for the Digital Twin
+//   3. Webhooks       — event-driven push notifications (evidence, alerts, cases)
+//   4. SDK            — official SDKs for JavaScript, Python, Go
+//   5. Documentation  — interactive API docs, tutorials, code examples
+//   6. Integrations   — third-party platform integrations (Slack, Teams, ArcGIS)
+// =============================================================================
+
+model WebhookEndpoint {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  // owner
+  userId          String?
+  organizationId  String?
+  name            String
+  description     String?
+  url             String   // HTTPS endpoint URL
+  // events: JSON array of event types the webhook is subscribed to
+  events          String   // JSON: ["evidence.created", "alert.detected", ...]
+  // auth
+  secret          String?  // HMAC signing secret
+  isActive        Boolean  @default(true)
+  // delivery config
+  maxRetries      Int      @default(3)
+  retryDelaySec   Int      @default(60)
+  timeoutSec      Int      @default(30)
+  // stats
+  deliveryCount   Int      @default(0)
+  successCount    Int      @default(0)
+  failureCount    Int      @default(0)
+  lastDeliveryAt  DateTime?
+  lastDeliveryStatus String? // success | failed | pending
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deliveries      WebhookDelivery[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model WebhookDelivery {
+  id              String   @id @default(cuid())
+  endpointId      String
+  // event details
+  eventType       String   // e.g. "evidence.created"
+  eventId         String   // unique event ID for idempotency
+  payload         String   // JSON payload sent
+  // delivery
+  attempt         Int      @default(1) // 1, 2, 3...
+  status          String   @default("pending") // pending | success | failed | retrying
+  statusCode      Int?     // HTTP status code received
+  responseTimeMs  Int?     // response time in ms
+  responseBody    String?  // truncated response body
+  errorMessage    String?
+  // timing
+  scheduledAt     DateTime @default(now())
+  deliveredAt     DateTime?
+  nextRetryAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  endpoint        WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId])
+  @@index([eventType])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model ApiKey {
+  id              String   @id @default(cuid())
+  key             String   @unique // the actual API key (prefixed "sk_live_" or "sk_test_")
+  keyPrefix       String   // first 12 chars for display (sk_live_abc1...)
+  name            String
+  description     String?
+  // owner
+  userId          String?
+  organizationId  String?
+  // scopes: JSON array of permission scopes
+  scopes          String   // JSON: ["read:evidence", "write:webhooks", ...]
+  // rate limiting
+  rateLimitPerMin Int      @default(100)
+  rateLimitPerDay Int      @default(10000)
+  // status
+  status          String   @default("active") // active | revoked | expired
+  expiresAt       DateTime?
+  lastUsedAt      DateTime?
+  // usage stats
+  totalRequests   Int      @default(0)
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([keyPrefix])
+  @@index([createdAt])
+}
+
+model SdkRelease {
+  id              String   @id @default(cuid())
+  // language: javascript | python | go | java | php | ruby
+  language        String
+  version         String   // semver: 1.0.0
+  // package info
+  packageName     String   // npm name, pypi name, etc.
+  registryUrl     String   // npm/pypi/godoc URL
+  downloadUrl     String?  // direct download
+  // release notes
+  releaseNotes    String?  // markdown
+  changelog       String?  // JSON
+  // status
+  isLatest        Boolean  @default(false)
+  isStable        Boolean  @default(true)
+  deprecated      Boolean  @default(false)
+  // stats
+  downloadCount   Int      @default(0)
+  // metadata
+  minPlatformVersion String? // minimum Sentinel API version
+  metadata        String?  // JSON
+  publishedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([language])
+  @@index([version])
+  @@index([isLatest])
+  @@index([publishedAt])
+}
+
+model ApiIntegration {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String
+  // category: messaging | gis | monitoring | data | automation | security
+  category        String
+  // platform: slack | microsoft_teams | arcgis | grafana | powerbi | zapier | mqtt | websocket
+  platform        String
+  // config
+  iconUrl         String?
+  docsUrl         String
+  setupGuide      String?  // markdown
+  configSchema    String?  // JSON schema for integration config
+  // status
+  isActive        Boolean  @default(true)
+  isOfficial      Boolean  @default(false)
+  // usage
+  installCount    Int      @default(0)
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([platform])
+  @@index([isActive])
+  @@index([isOfficial])
+}

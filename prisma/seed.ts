@@ -178,6 +178,9 @@ async function main() {
 
   console.log("[seed] Seeding M23 simulation engine data...");
   await seedSimulationData().catch((e) => console.log("[seed] M23 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding M25 developer platform data...");
+  await seedDeveloperData().catch((e) => console.log("[seed] M25 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -3439,6 +3442,288 @@ async function seedSimulationData() {
   }
 
   console.log(`[seed] Seeded ${scenarioCount} simulation scenarios (1 baseline + 4 single interventions + 2 combined).`);
+}
+
+// ---------------------------------------------------------------------------
+// M25 — Developer Platform seed data
+// ---------------------------------------------------------------------------
+
+async function seedDeveloperData() {
+  // Check if developer data already exists
+  const existing = await prisma.webhookEndpoint.count();
+  if (existing > 0) {
+    console.log(`[seed] Developer data already exists (${existing} webhooks) — skipping.`);
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+  const org = await prisma.organization.findFirst({ select: { id: true } });
+
+  const now = new Date();
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  let webhookCount = 0;
+  let apiKeyCount = 0;
+  let sdkCount = 0;
+  let integrationCount = 0;
+  let deliveryCount = 0;
+
+  // ===========================================================================
+  // WEBHOOK ENDPOINTS — 4
+  // ===========================================================================
+  const webhooks = [
+    {
+      key: "wh-epa-alerts-bot",
+      name: "EPA Alert Bot",
+      description: "Sends fraud alerts and investigation updates to EPA Slack channel",
+      url: "https://hooks.slack.com/services/T0/B0/XXXX",
+      events: ["alert.detected", "alert.confirmed", "investigation.opened", "investigation.closed"],
+      secret: "whsec_a1b2c3d4e5f6g7h8i9j0",
+      isActive: true,
+      deliveryCount: 142,
+      successCount: 138,
+      failureCount: 4,
+      lastDeliveryAt: daysAgo(0.5),
+      lastDeliveryStatus: "success",
+    },
+    {
+      key: "wh-wacam-evidence",
+      name: "WACAM Evidence Tracker",
+      description: "Tracks new evidence related to WACAM-monitored communities",
+      url: "https://wacam.org/api/webhooks/sentinel",
+      events: ["evidence.created", "evidence.verified", "mission.completed"],
+      secret: "whsec_wacam_evidence_secret",
+      isActive: true,
+      deliveryCount: 89,
+      successCount: 87,
+      failureCount: 2,
+      lastDeliveryAt: daysAgo(1),
+      lastDeliveryStatus: "success",
+    },
+    {
+      key: "wh-arcgis-sync",
+      name: "ArcGIS Sync",
+      description: "Syncs hotspot predictions and twin entities to ArcGIS Online",
+      url: "https://services.arcgis.com/sentinel/webhook",
+      events: ["hotspot.predicted", "prediction.updated", "evidence.created"],
+      secret: "whsec_arcgis_sync_token",
+      isActive: true,
+      deliveryCount: 234,
+      successCount: 230,
+      failureCount: 4,
+      lastDeliveryAt: daysAgo(0.2),
+      lastDeliveryStatus: "success",
+    },
+    {
+      key: "wh-grafana-metrics",
+      name: "Grafana Metrics",
+      description: "Pushes analytics KPIs to Grafana dashboard for visualization",
+      url: "https://grafana.epa.gov.gh/api/webhook/sentinel",
+      events: ["simulation.completed", "alert.detected"],
+      secret: "whsec_grafana_metrics_key",
+      isActive: false,
+      deliveryCount: 45,
+      successCount: 40,
+      failureCount: 5,
+      lastDeliveryAt: daysAgo(7),
+      lastDeliveryStatus: "failed",
+    },
+  ];
+
+  const webhookIds: string[] = [];
+  for (const wh of webhooks) {
+    const created = await prisma.webhookEndpoint.create({
+      data: {
+        key: wh.key,
+        name: wh.name,
+        description: wh.description,
+        url: wh.url,
+        events: JSON.stringify(wh.events),
+        secret: wh.secret,
+        isActive: wh.isActive,
+        userId: admin?.id,
+        organizationId: org?.id,
+        deliveryCount: wh.deliveryCount,
+        successCount: wh.successCount,
+        failureCount: wh.failureCount,
+        lastDeliveryAt: wh.lastDeliveryAt,
+        lastDeliveryStatus: wh.lastDeliveryStatus,
+      },
+    });
+    webhookIds.push(created.id);
+    webhookCount++;
+  }
+
+  // ===========================================================================
+  // WEBHOOK DELIVERIES — 8 sample deliveries
+  // ===========================================================================
+  const deliveryTypes = [
+    { eventType: "alert.detected", status: "success", statusCode: 200, responseTimeMs: 145 },
+    { eventType: "evidence.created", status: "success", statusCode: 200, responseTimeMs: 89 },
+    { eventType: "investigation.opened", status: "success", statusCode: 201, responseTimeMs: 234 },
+    { eventType: "hotspot.predicted", status: "success", statusCode: 200, responseTimeMs: 312 },
+    { eventType: "alert.detected", status: "failed", statusCode: 500, responseTimeMs: 5000, errorMessage: "Internal Server Error" },
+    { eventType: "evidence.verified", status: "success", statusCode: 200, responseTimeMs: 167 },
+    { eventType: "mission.completed", status: "success", statusCode: 200, responseTimeMs: 98 },
+    { eventType: "simulation.completed", status: "success", statusCode: 200, responseTimeMs: 423 },
+  ];
+
+  for (let i = 0; i < deliveryTypes.length && i < webhookIds.length; i++) {
+    const dt = deliveryTypes[i]!;
+    const endpointId = webhookIds[i % webhookIds.length]!;
+    await prisma.webhookDelivery.create({
+      data: {
+        endpointId,
+        eventType: dt.eventType,
+        eventId: `evt_seed_${i}`,
+        payload: JSON.stringify({ event: dt.eventType, eventId: `evt_seed_${i}`, data: { seeded: true }, timestamp: daysAgo(i).toISOString() }),
+        attempt: 1,
+        status: dt.status,
+        statusCode: dt.statusCode,
+        responseTimeMs: dt.responseTimeMs,
+        responseBody: dt.status === "success" ? '{"ok":true}' : dt.errorMessage,
+        errorMessage: dt.errorMessage,
+        scheduledAt: daysAgo(i),
+        deliveredAt: dt.status === "success" ? daysAgo(i) : null,
+      },
+    });
+    deliveryCount++;
+  }
+
+  // ===========================================================================
+  // API KEYS — 4
+  // ===========================================================================
+  const apiKeys = [
+    {
+      key: "sk_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
+      keyPrefix: "sk_live_a1b2",
+      name: "EPA Production Key",
+      description: "Primary API key for EPA integration",
+      scopes: ["read:evidence", "read:events", "read:investigations", "write:investigations", "read:inspections", "write:inspections", "read:cases", "write:cases", "read:analytics"],
+      rateLimitPerMin: 200,
+      rateLimitPerDay: 50000,
+      totalRequests: 15420,
+      lastUsedAt: daysAgo(0.1),
+    },
+    {
+      key: "sk_live_b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1",
+      keyPrefix: "sk_live_b2c3",
+      name: "WACAM Field Agent App",
+      description: "API key for WACAM mobile field reporting app",
+      scopes: ["read:evidence", "write:evidence", "read:events", "write:events", "read:missions", "write:missions"],
+      rateLimitPerMin: 100,
+      rateLimitPerDay: 10000,
+      totalRequests: 8932,
+      lastUsedAt: daysAgo(0.3),
+    },
+    {
+      key: "sk_live_c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2",
+      keyPrefix: "sk_live_c3d4",
+      name: "ArcGIS Integration",
+      description: "API key for ArcGIS Online integration",
+      scopes: ["read:hotspots", "read:predictions", "read:evidence", "read:events"],
+      rateLimitPerMin: 50,
+      rateLimitPerDay: 5000,
+      totalRequests: 4521,
+      lastUsedAt: daysAgo(0.5),
+    },
+    {
+      key: "sk_test_d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3",
+      keyPrefix: "sk_test_d4e5",
+      name: "Development Test Key",
+      description: "Test key for development environment",
+      scopes: ["read:evidence", "read:events", "read:analytics"],
+      rateLimitPerMin: 30,
+      rateLimitPerDay: 1000,
+      totalRequests: 234,
+      lastUsedAt: daysAgo(2),
+    },
+  ];
+
+  for (const k of apiKeys) {
+    await prisma.apiKey.create({
+      data: {
+        key: k.key,
+        keyPrefix: k.keyPrefix,
+        name: k.name,
+        description: k.description,
+        scopes: JSON.stringify(k.scopes),
+        userId: admin?.id,
+        organizationId: org?.id,
+        rateLimitPerMin: k.rateLimitPerMin,
+        rateLimitPerDay: k.rateLimitPerDay,
+        status: "active",
+        totalRequests: k.totalRequests,
+        lastUsedAt: k.lastUsedAt,
+      },
+    });
+    apiKeyCount++;
+  }
+
+  // ===========================================================================
+  // SDK RELEASES — 6 (one per language, all v1.0.0 latest)
+  // ===========================================================================
+  const sdkReleases = [
+    { language: "javascript", packageName: "@sentinel/sdk", registryUrl: "https://www.npmjs.com/package/@sentinel/sdk", installCmd: "npm install @sentinel/sdk", downloadCount: 4521, releaseNotes: "Initial release. Full REST API coverage, TypeScript types, automatic retries." },
+    { language: "python", packageName: "sentinel-africa", registryUrl: "https://pypi.org/project/sentinel-africa/", installCmd: "pip install sentinel-africa", downloadCount: 3210, releaseNotes: "Initial release. Async support, type hints, Pydantic models." },
+    { language: "go", packageName: "github.com/sentinel-africa/sdk-go", registryUrl: "https://pkg.go.dev/github.com/sentinel-africa/sdk-go", installCmd: "go get github.com/sentinel-africa/sdk-go", downloadCount: 892, releaseNotes: "Initial release. Context support, streaming, error handling." },
+    { language: "java", packageName: "com.sentinel:sdk", registryUrl: "https://search.maven.org/artifact/com.sentinel/sdk", installCmd: "mvn install com.sentinel:sdk:1.0.0", downloadCount: 445, releaseNotes: "Initial release. Java 11+, CompletableFuture async, Jackson JSON." },
+    { language: "php", packageName: "sentinel/sdk", registryUrl: "https://packagist.org/packages/sentinel/sdk", installCmd: "composer require sentinel/sdk", downloadCount: 234, releaseNotes: "Initial release. PHP 8+, PSR-18 HTTP client, async via Guzzle." },
+    { language: "ruby", packageName: "sentinel-sdk", registryUrl: "https://rubygems.org/gems/sentinel-sdk", installCmd: "gem install sentinel-sdk", downloadCmd: "gem install sentinel-sdk", downloadCount: 123, releaseNotes: "Initial release. Ruby 3+, Faraday HTTP client, dry-types." },
+  ];
+
+  for (const sdk of sdkReleases) {
+    await prisma.sdkRelease.create({
+      data: {
+        language: sdk.language,
+        version: "1.0.0",
+        packageName: sdk.packageName,
+        registryUrl: sdk.registryUrl,
+        downloadUrl: sdk.registryUrl,
+        releaseNotes: sdk.releaseNotes,
+        isLatest: true,
+        isStable: true,
+        deprecated: false,
+        downloadCount: sdk.downloadCount,
+        minPlatformVersion: "v1",
+        publishedAt: daysAgo(30),
+      },
+    });
+    sdkCount++;
+  }
+
+  // ===========================================================================
+  // INTEGRATIONS — 8
+  // ===========================================================================
+  const integrations = [
+    { key: "slack", name: "Slack", description: "Send real-time fraud alerts and investigation updates to Slack channels", category: "messaging", platform: "slack", docsUrl: "https://api.slack.com/messaging/webhooks", isOfficial: true, installCount: 1240 },
+    { key: "microsoft-teams", name: "Microsoft Teams", description: "Push alerts and case updates to Microsoft Teams channels", category: "messaging", platform: "microsoft_teams", docsUrl: "https://learn.microsoft.com/microsoftteams/platform/webhooks-and-connectors", isOfficial: true, installCount: 456 },
+    { key: "arcgis", name: "ArcGIS Online", description: "Sync hotspot predictions and twin entities to ArcGIS Online for GIS visualization", category: "gis", platform: "arcgis", docsUrl: "https://developers.arcgis.com/rest/", isOfficial: true, installCount: 89 },
+    { key: "grafana", name: "Grafana", description: "Visualize Sentinel analytics KPIs in Grafana dashboards", category: "monitoring", platform: "grafana", docsUrl: "https://grafana.com/docs/grafana/latest/http_api/", isOfficial: false, installCount: 234 },
+    { key: "powerbi", name: "Power BI", description: "Export analytics data to Microsoft Power BI for reporting", category: "data", platform: "powerbi", docsUrl: "https://docs.microsoft.com/power-bi/developer/", isOfficial: false, installCount: 167 },
+    { key: "zapier", name: "Zapier", description: "Automate workflows with Zapier — trigger actions on 5,000+ apps", category: "automation", platform: "zapier", docsUrl: "https://zapier.com/developer/", isOfficial: true, installCount: 512 },
+    { key: "mqtt", name: "MQTT", description: "Publish real-time events to MQTT topics for IoT integrations", category: "automation", platform: "mqtt", docsUrl: "https://mqtt.org/", isOfficial: false, installCount: 78 },
+    { key: "splunk", name: "Splunk SIEM", description: "Forward audit logs and fraud alerts to Splunk for security analysis", category: "security", platform: "splunk", docsUrl: "https://docs.splunk.com/Documentation", isOfficial: false, installCount: 45 },
+  ];
+
+  for (const integ of integrations) {
+    await prisma.apiIntegration.create({
+      data: {
+        key: integ.key,
+        name: integ.name,
+        description: integ.description,
+        category: integ.category,
+        platform: integ.platform,
+        docsUrl: integ.docsUrl,
+        isActive: true,
+        isOfficial: integ.isOfficial,
+        installCount: integ.installCount,
+      },
+    });
+    integrationCount++;
+  }
+
+  console.log(`[seed] Seeded ${webhookCount} webhooks (${deliveryCount} deliveries), ${apiKeyCount} API keys, ${sdkCount} SDK releases, ${integrationCount} integrations.`);
 }
 
 main()
