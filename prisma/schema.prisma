@@ -3031,3 +3031,197 @@ model DisasterRecoveryPlan {
   @@index([readinessStatus])
   @@index([isActive])
 }
+
+// =============================================================================
+// MILESTONE 27 — Performance Hardening
+// =============================================================================
+// Scales the platform to millions of users, millions of events, and petabyte
+// imagery. Covers 6 domains:
+//   1. Users          — concurrent user capacity, auth throughput
+//   2. Events         — intelligence event ingestion rate, query throughput
+//   3. Imagery        — satellite imagery storage (petabyte), tile serving
+//   4. Caching        — multi-layer cache (CDN, Redis, app-level) hit rates
+//   5. Horizontal Scaling — auto-scaling, load balancer, partitioning
+//   6. Optimization   — query optimization, index tuning, N+1 elimination
+// =============================================================================
+
+model PerfMetric {
+  id              String   @id @default(cuid())
+  // domain: users | events | imagery | caching | scaling | optimization
+  domain          String
+  // metric name, e.g. "concurrent_users", "p99_latency", "cache_hit_rate"
+  metric          String
+  // current value
+  value           Float
+  unit            String   // count | ms | req/s | GB | TB | % | MB/s
+  // target/benchmark
+  target          Float?
+  targetLabel     String?
+  // trend: up | down | flat
+  trend           String   @default("flat")
+  trendPct        Float    @default(0)
+  // status: good | warning | critical
+  status          String   @default("good")
+  // capacity tier: current | projected_6mo | projected_12mo
+  capacityTier    String   @default("current")
+  // description
+  description     String?
+  // timestamp
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([domain])
+  @@index([metric])
+  @@index([status])
+  @@index([capacityTier])
+  @@index([recordedAt])
+}
+
+model LoadTestRun {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  // type: stress | spike | soak | ramp | capacity
+  type            String
+  // status: scheduled | running | completed | failed | aborted
+  status          String   @default("completed")
+  // test config
+  targetEndpoint  String
+  concurrentUsers Int
+  durationSec     Int
+  rampUpSec       Int      @default(60)
+  // results
+  totalRequests   Int      @default(0)
+  successfulReqs  Int      @default(0)
+  failedReqs      Int      @default(0)
+  // latency (ms)
+  avgLatencyMs    Float    @default(0)
+  p50LatencyMs    Float    @default(0)
+  p95LatencyMs    Float    @default(0)
+  p99LatencyMs    Float    @default(0)
+  minLatencyMs    Float    @default(0)
+  maxLatencyMs    Float    @default(0)
+  // throughput
+  requestsPerSec  Float    @default(0)
+  // errors
+  errorRate       Float    @default(0) // %
+  errorBreakdown  String?  // JSON
+  // resource usage
+  cpuUsagePct     Float    @default(0)
+  memoryUsagePct  Float    @default(0)
+  dbConnections   Int      @default(0)
+  // pass/fail
+  passed          Boolean  @default(true)
+  passCriteria    String?  // JSON
+  // timing
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationActual  Int?     // actual duration in seconds
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([passed])
+  @@index([createdAt])
+}
+
+model CacheStats {
+  id              String   @id @default(cuid())
+  // layer: cdn | redis | app | database | browser
+  layer           String
+  // cache name, e.g. "tile-cache", "evidence-cache", "api-response-cache"
+  cacheName       String
+  // stats
+  hitCount        Int      @default(0)
+  missCount       Int      @default(0)
+  hitRate         Float    @default(0) // %
+  evictionCount   Int      @default(0)
+  // size
+  sizeBytes       Int      @default(0)
+  maxBytes        Int      @default(0)
+  entryCount      Int      @default(0)
+  // performance
+  avgGetLatencyMs Float    @default(0)
+  avgSetLatencyMs Float    @default(0)
+  // TTL
+  defaultTtlSec   Int      @default(300)
+  // status
+  status          String   @default("healthy") // healthy | degraded | critical
+  // timing
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([layer])
+  @@index([cacheName])
+  @@index([status])
+  @@index([recordedAt])
+}
+
+model ScalingEvent {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  // type: scale_up | scale_down | auto_scale | failover | partition | migration
+  type            String
+  // resource: web-server | api-server | database | cache | storage | worker
+  resource        String
+  // trigger: cpu_threshold | memory_threshold | queue_depth | manual | scheduled | traffic_spike
+  trigger         String
+  description     String
+  // scaling details
+  fromCount       Int      @default(1)
+  toCount         Int      @default(1)
+  // status: completed | in_progress | failed | rolled_back
+  status          String   @default("completed")
+  // timing
+  triggeredAt     DateTime @default(now())
+  completedAt     DateTime?
+  durationSec     Int?
+  // impact
+  impactNotes     String?
+  // metadata
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([resource])
+  @@index([status])
+  @@index([triggeredAt])
+}
+
+model OptimizationRecord {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // type: query_optimization | index_addition | n+1_fix | caching_addition | code_optimization | bundle_size | image_optimization | lazy_load
+  type            String
+  // target: what was optimized
+  target          String   // e.g. "/api/v1/evidence", "evidence.list()", "tile-serving"
+  // status: proposed | in_progress | completed | reverted
+  status          String   @default("proposed")
+  // metrics before
+  beforeMetric    Float?
+  afterMetric     Float?
+  metricUnit      String?  // ms | MB | req/s
+  metricName      String?  // e.g. "p95_latency", "bundle_size", "query_time"
+  // improvement
+  improvementPct  Float?   // % improvement
+  // impact
+  impactLevel     String   @default("medium") // low | medium | high | critical
+  impactNotes     String?
+  // ownership
+  proposedById    String?
+  implementedById String?
+  // timing
+  proposedAt      DateTime @default(now())
+  implementedAt   DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([impactLevel])
+  @@index([createdAt])
+}

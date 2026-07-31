@@ -184,6 +184,9 @@ async function main() {
 
   console.log("[seed] Seeding M26 security hardening data...");
   await seedSecurityData().catch((e) => console.log("[seed] M26 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding M27 performance hardening data...");
+  await seedPerformanceData().catch((e) => console.log("[seed] M27 skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -4097,6 +4100,388 @@ async function seedSecurityData() {
   }
 
   console.log(`[seed] Seeded ${policyCount} policies, ${eventCount} events, ${threatCount} threats, ${backupCount} backups, ${penTestCount} pen tests, ${secretCount} secret rotations, ${drCount} DR plans.`);
+}
+
+// ---------------------------------------------------------------------------
+// M27 — Performance Hardening seed data
+// ---------------------------------------------------------------------------
+
+async function seedPerformanceData() {
+  const existing = await prisma.perfMetric.count();
+  if (existing > 0) {
+    console.log(`[seed] Performance data already exists (${existing} metrics) — skipping.`);
+    return;
+  }
+
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+  const now = new Date();
+  const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  let metricCount = 0;
+  let loadTestCount = 0;
+  let cacheCount = 0;
+  let scalingCount = 0;
+  let optimizationCount = 0;
+
+  // ===========================================================================
+  // PERFORMANCE METRICS — 18 (3 per domain × 6 domains)
+  // ===========================================================================
+  const metrics = [
+    // Users
+    { domain: "users", metric: "concurrent_users", value: 42000, unit: "count", target: 500000, targetLabel: "Target: 500K concurrent", status: "good", capacityTier: "current", description: "Current concurrent active users" },
+    { domain: "users", metric: "auth_throughput", value: 3200, unit: "req/s", target: 10000, targetLabel: "Target: 10K auth/s", status: "warning", capacityTier: "current", description: "Authentication requests per second" },
+    { domain: "users", metric: "p95_auth_latency", value: 85, unit: "ms", target: 100, targetLabel: "Target: <100ms", status: "good", capacityTier: "current", description: "P95 authentication latency" },
+    // Events
+    { domain: "events", metric: "events_stored", value: 12500000, unit: "count", target: 100000000, targetLabel: "Target: 100M events", status: "good", capacityTier: "current", description: "Total intelligence events stored" },
+    { domain: "events", metric: "event_ingest_rate", value: 18000, unit: "req/s", target: 50000, targetLabel: "Target: 50K events/s", status: "warning", capacityTier: "current", description: "Event ingestion rate per second" },
+    { domain: "events", metric: "p95_query_latency", value: 120, unit: "ms", target: 100, targetLabel: "Target: <100ms", status: "warning", capacityTier: "current", description: "P95 event query latency" },
+    // Imagery
+    { domain: "imagery", metric: "imagery_storage", value: 850, unit: "TB", target: 2000, targetLabel: "Target: 2PB", status: "good", capacityTier: "current", description: "Total satellite imagery stored" },
+    { domain: "imagery", metric: "tile_serve_rate", value: 7800, unit: "req/s", target: 10000, targetLabel: "Target: 10K tiles/s", status: "warning", capacityTier: "current", description: "Map tile serving rate per second" },
+    { domain: "imagery", metric: "tile_cache_hit_rate", value: 92, unit: "%", target: 95, targetLabel: "Target: >95%", status: "warning", capacityTier: "current", description: "Tile cache hit rate" },
+    // Caching
+    { domain: "caching", metric: "overall_hit_rate", value: 89, unit: "%", target: 95, targetLabel: "Target: >95%", status: "warning", capacityTier: "current", description: "Overall cache hit rate across all layers" },
+    { domain: "caching", metric: "avg_get_latency", value: 2.3, unit: "ms", target: 5, targetLabel: "Target: <5ms", status: "good", capacityTier: "current", description: "Average cache GET latency" },
+    { domain: "caching", metric: "eviction_rate", value: 0.8, unit: "%", target: 1, targetLabel: "Target: <1%", status: "good", capacityTier: "current", description: "Cache eviction rate" },
+    // Scaling
+    { domain: "scaling", metric: "current_nodes", value: 12, unit: "count", target: 100, targetLabel: "Target: 1-100 nodes", status: "good", capacityTier: "current", description: "Current API server nodes (auto-scaled)" },
+    { domain: "scaling", metric: "scale_up_time", value: 45, unit: "ms", target: 60, targetLabel: "Target: <60s", status: "good", capacityTier: "current", description: "Average scale-up time in seconds" },
+    { domain: "scaling", metric: "db_read_replicas", value: 5, unit: "count", target: 10, targetLabel: "Target: 10 replicas", status: "warning", capacityTier: "current", description: "Database read replicas for query load balancing" },
+    // Optimization
+    { domain: "optimization", metric: "p95_api_latency", value: 78, unit: "ms", target: 100, targetLabel: "Target: <100ms", status: "good", capacityTier: "current", description: "P95 API response latency across all endpoints" },
+    { domain: "optimization", metric: "n_plus_one_violations", value: 2, unit: "count", target: 0, targetLabel: "Target: 0", status: "warning", capacityTier: "current", description: "Detected N+1 query violations" },
+    { domain: "optimization", metric: "bundle_size", value: 285, unit: "GB", target: 250, targetLabel: "Target: <250KB", status: "warning", capacityTier: "current", description: "JavaScript bundle size (KB)" },
+  ];
+
+  for (const m of metrics) {
+    await prisma.perfMetric.create({ data: m });
+    metricCount++;
+  }
+
+  // Also add projected metrics (6mo and 12mo) for users domain
+  const projections = [
+    { domain: "users", metric: "concurrent_users", value: 180000, unit: "count", target: 500000, targetLabel: "Target: 500K concurrent", status: "good", capacityTier: "projected_6mo", description: "6-month projection: concurrent users" },
+    { domain: "users", metric: "concurrent_users", value: 420000, unit: "count", target: 500000, targetLabel: "Target: 500K concurrent", status: "warning", capacityTier: "projected_12mo", description: "12-month projection: concurrent users" },
+    { domain: "events", metric: "events_stored", value: 45000000, unit: "count", target: 100000000, targetLabel: "Target: 100M events", status: "good", capacityTier: "projected_6mo", description: "6-month projection: events stored" },
+    { domain: "events", metric: "events_stored", value: 95000000, unit: "count", target: 100000000, targetLabel: "Target: 100M events", status: "warning", capacityTier: "projected_12mo", description: "12-month projection: events stored" },
+    { domain: "imagery", metric: "imagery_storage", value: 1400, unit: "TB", target: 2000, targetLabel: "Target: 2PB", status: "good", capacityTier: "projected_6mo", description: "6-month projection: imagery stored" },
+    { domain: "imagery", metric: "imagery_storage", value: 2100, unit: "TB", target: 2000, targetLabel: "Target: 2PB", status: "critical", capacityTier: "projected_12mo", description: "12-month projection: imagery stored (exceeds target)" },
+  ];
+  for (const p of projections) {
+    await prisma.perfMetric.create({ data: p });
+    metricCount++;
+  }
+
+  // ===========================================================================
+  // LOAD TEST RUNS — 5
+  // ===========================================================================
+  const loadTests = [
+    {
+      key: "lt-stress-evidence-api-001",
+      name: "Evidence API Stress Test — 10K concurrent",
+      description: "Stress test /api/v1/evidence with 10,000 concurrent users for 5 minutes",
+      type: "stress",
+      status: "completed",
+      targetEndpoint: "/api/v1/evidence",
+      concurrentUsers: 10000,
+      durationSec: 300,
+      rampUpSec: 60,
+      totalRequests: 2850000,
+      successfulReqs: 2836000,
+      failedReqs: 14000,
+      avgLatencyMs: 145,
+      p50LatencyMs: 92,
+      p95LatencyMs: 280,
+      p99LatencyMs: 520,
+      minLatencyMs: 12,
+      maxLatencyMs: 3200,
+      requestsPerSec: 9500,
+      errorRate: 0.49,
+      cpuUsagePct: 78,
+      memoryUsagePct: 72,
+      dbConnections: 85,
+      passed: true,
+      startedAt: daysAgo(7),
+      completedAt: daysAgo(7),
+      durationActual: 302,
+    },
+    {
+      key: "lt-spike-auth-001",
+      name: "Auth Spike Test — 5K sudden users",
+      description: "Spike test: 0→5000 concurrent users in 5 seconds on /api/v1/auth/signin",
+      type: "spike",
+      status: "completed",
+      targetEndpoint: "/api/v1/auth/signin",
+      concurrentUsers: 5000,
+      durationSec: 120,
+      rampUpSec: 5,
+      totalRequests: 580000,
+      successfulReqs: 579500,
+      failedReqs: 500,
+      avgLatencyMs: 185,
+      p50LatencyMs: 120,
+      p95LatencyMs: 380,
+      p99LatencyMs: 850,
+      minLatencyMs: 25,
+      maxLatencyMs: 2400,
+      requestsPerSec: 4800,
+      errorRate: 0.09,
+      cpuUsagePct: 92,
+      memoryUsagePct: 85,
+      dbConnections: 120,
+      passed: true,
+      startedAt: daysAgo(14),
+      completedAt: daysAgo(14),
+      durationActual: 122,
+    },
+    {
+      key: "lt-soak-full-platform-001",
+      name: "24-Hour Soak Test — Full Platform",
+      description: "Soak test: 2000 concurrent users for 24 hours to detect memory leaks",
+      type: "soak",
+      status: "completed",
+      targetEndpoint: "/ (full platform)",
+      concurrentUsers: 2000,
+      durationSec: 86400,
+      rampUpSec: 300,
+      totalRequests: 172000000,
+      successfulReqs: 171950000,
+      failedReqs: 50000,
+      avgLatencyMs: 68,
+      p50LatencyMs: 45,
+      p95LatencyMs: 120,
+      p99LatencyMs: 250,
+      minLatencyMs: 8,
+      maxLatencyMs: 1800,
+      requestsPerSec: 1990,
+      errorRate: 0.03,
+      cpuUsagePct: 55,
+      memoryUsagePct: 68,
+      dbConnections: 42,
+      passed: true,
+      startedAt: daysAgo(30),
+      completedAt: daysAgo(29),
+      durationActual: 86405,
+    },
+    {
+      key: "lt-ramp-tile-serving-001",
+      name: "Tile Serving Ramp Test — Find max throughput",
+      description: "Ramp test: gradually increase from 100→20000 req/s on tile serving",
+      type: "ramp",
+      status: "completed",
+      targetEndpoint: "/api/v1/satellite/tiles/{z}/{x}/{y}",
+      concurrentUsers: 15000,
+      durationSec: 600,
+      rampUpSec: 480,
+      totalRequests: 5800000,
+      successfulReqs: 5780000,
+      failedReqs: 20000,
+      avgLatencyMs: 35,
+      p50LatencyMs: 18,
+      p95LatencyMs: 85,
+      p99LatencyMs: 180,
+      minLatencyMs: 3,
+      maxLatencyMs: 950,
+      requestsPerSec: 9700,
+      errorRate: 0.34,
+      cpuUsagePct: 88,
+      memoryUsagePct: 75,
+      dbConnections: 15,
+      passed: true,
+      startedAt: daysAgo(21),
+      completedAt: daysAgo(21),
+      durationActual: 602,
+    },
+    {
+      key: "lt-capacity-1m-users-001",
+      name: "1M User Capacity Test",
+      description: "Capacity test: verify platform handles 1M registered users with 100K concurrent",
+      type: "capacity",
+      status: "completed",
+      targetEndpoint: "/ (full platform)",
+      concurrentUsers: 100000,
+      durationSec: 600,
+      rampUpSec: 120,
+      totalRequests: 85000000,
+      successfulReqs: 84720000,
+      failedReqs: 280000,
+      avgLatencyMs: 210,
+      p50LatencyMs: 145,
+      p95LatencyMs: 420,
+      p99LatencyMs: 890,
+      minLatencyMs: 15,
+      maxLatencyMs: 4500,
+      requestsPerSec: 141000,
+      errorRate: 0.33,
+      cpuUsagePct: 95,
+      memoryUsagePct: 89,
+      dbConnections: 180,
+      passed: false,
+      startedAt: daysAgo(3),
+      completedAt: daysAgo(3),
+      durationActual: 605,
+    },
+  ];
+
+  for (const lt of loadTests) {
+    await prisma.loadTestRun.create({ data: lt });
+    loadTestCount++;
+  }
+
+  // ===========================================================================
+  // CACHE STATS — 5 (one per layer)
+  // ===========================================================================
+  const cacheStats = [
+    { layer: "cdn", cacheName: "Cloudflare CDN", hitCount: 89000000, missCount: 4200000, hitRate: 95.5, evictionCount: 1200, sizeBytes: 500000000, maxBytes: 1900000000, entryCount: 45000, avgGetLatencyMs: 0.8, avgSetLatencyMs: 0, defaultTtlSec: 3600, status: "healthy" },
+    { layer: "redis", cacheName: "Redis Cluster (6 nodes)", hitCount: 67000000, missCount: 8300000, hitRate: 89.0, evictionCount: 89000, sizeBytes: 1900000000, maxBytes: 1900000000, entryCount: 1200000, avgGetLatencyMs: 1.2, avgSetLatencyMs: 0.8, defaultTtlSec: 300, status: "healthy" },
+    { layer: "app", cacheName: "App LRU Cache", hitCount: 23000000, missCount: 7700000, hitRate: 74.9, evictionCount: 340000, sizeBytes: 256000000, maxBytes: 512000000, entryCount: 85000, avgGetLatencyMs: 0.05, avgSetLatencyMs: 0.03, defaultTtlSec: 60, status: "degraded" },
+    { layer: "database", cacheName: "PostgreSQL Shared Buffers", hitCount: 95000000, missCount: 5000000, hitRate: 95.0, evictionCount: 0, sizeBytes: 1900000000, maxBytes: 1900000000, entryCount: 0, avgGetLatencyMs: 0.02, avgSetLatencyMs: 0, defaultTtlSec: 0, status: "healthy" },
+    { layer: "browser", cacheName: "Browser Cache (SW)", hitCount: 45000000, missCount: 15000000, hitRate: 75.0, evictionCount: 0, sizeBytes: 0, maxBytes: 0, entryCount: 0, avgGetLatencyMs: 0.5, avgSetLatencyMs: 0, defaultTtlSec: 86400, status: "healthy" },
+  ];
+
+  for (const c of cacheStats) {
+    await prisma.cacheStats.create({ data: c });
+    cacheCount++;
+  }
+
+  // ===========================================================================
+  // SCALING EVENTS — 6
+  // ===========================================================================
+  const scalingEvents = [
+    { key: "scale-up-traffic-spike-001", type: "auto_scale", resource: "api-server", trigger: "traffic_spike", description: "Auto-scaled API servers from 8→16 nodes due to 3x traffic spike during Atewa Forest investigation", fromCount: 8, toCount: 16, status: "completed", triggeredAt: hoursAgo(18), completedAt: hoursAgo(17), durationSec: 45, impactNotes: "No user-visible latency impact. Auto-scaling responded within 45s." },
+    { key: "scale-up-db-replicas-001", type: "scale_up", resource: "database", trigger: "cpu_threshold", description: "Added 2 PostgreSQL read replicas to handle increased query load from Analytics Platform", fromCount: 3, toCount: 5, status: "completed", triggeredAt: daysAgo(5), completedAt: daysAgo(5), durationSec: 600, impactNotes: "DB CPU dropped from 85% to 62%. Query latency improved 35%." },
+    { key: "partition-events-table-001", type: "partition", resource: "database", trigger: "manual", description: "Partitioned IntelligenceEvent table by month (12M+ rows). Created Jan-Jun 2024 partitions.", fromCount: 1, toCount: 6, status: "completed", triggeredAt: daysAgo(12), completedAt: daysAgo(12), durationSec: 1800, impactNotes: "Event query latency reduced from 250ms to 45ms (82% improvement)." },
+    { key: "scale-down-overnight-001", type: "scale_down", resource: "api-server", trigger: "scheduled", description: "Scheduled overnight scale-down from 12→6 nodes (low traffic period 2am-6am)", fromCount: 12, toCount: 6, status: "completed", triggeredAt: daysAgo(1), completedAt: daysAgo(1), durationSec: 30, impactNotes: "Cost savings: ~₵180/night. No user impact." },
+    { key: "scale-up-redis-cluster-001", type: "scale_up", resource: "cache", trigger: "memory_threshold", description: "Redis memory at 92%. Added 2 more nodes to cluster (4→6) to increase cache capacity.", fromCount: 4, toCount: 6, status: "completed", triggeredAt: daysAgo(8), completedAt: daysAgo(8), durationSec: 300, impactNotes: "Redis memory dropped to 65%. Eviction rate dropped from 2.1% to 0.8%." },
+    { key: "failover-db-primary-001", type: "failover", resource: "database", trigger: "manual", description: "Planned DB failover from primary to standby for maintenance. Zero-downtime switch.", fromCount: 1, toCount: 1, status: "completed", triggeredAt: daysAgo(15), completedAt: daysAgo(15), durationSec: 12, impactNotes: "12-second failover. No user-visible downtime. DR readiness verified." },
+  ];
+
+  for (const e of scalingEvents) {
+    await prisma.scalingEvent.create({ data: e });
+    scalingCount++;
+  }
+
+  // ===========================================================================
+  // OPTIMIZATION RECORDS — 6
+  // ===========================================================================
+  const optimizations = [
+    {
+      key: "opt-evidence-query-index-001",
+      title: "Add composite index on Evidence(uploadedById, createdAt)",
+      description: "Evidence list query was doing full table scan. Added composite index on (uploadedById, createdAt) to optimize the most common query pattern.",
+      type: "index_addition",
+      target: "Evidence.list() / /api/v1/evidence",
+      status: "completed",
+      beforeMetric: 340,
+      afterMetric: 28,
+      metricUnit: "ms",
+      metricName: "p95_query_latency",
+      improvementPct: 91.8,
+      impactLevel: "critical",
+      impactNotes: "91.8% latency reduction. Evidence list API p95 dropped from 340ms to 28ms. Affects 45% of all API traffic.",
+      implementedById: admin?.id,
+      proposedAt: daysAgo(20),
+      implementedAt: daysAgo(18),
+    },
+    {
+      key: "opt-n1-event-corroboration-001",
+      title: "Fix N+1 in event corroboration loading",
+      description: "Event detail page was issuing 1 query per corroboration (N+1). Replaced with single JOIN query using Prisma include.",
+      type: "n+1_fix",
+      target: "IntelligenceEvent.detail() / corroboration loading",
+      status: "completed",
+      beforeMetric: 1250,
+      afterMetric: 45,
+      metricUnit: "ms",
+      metricName: "page_load_time",
+      improvementPct: 96.4,
+      impactLevel: "high",
+      impactNotes: "96.4% improvement. Event detail page with 50 corroborations dropped from 1250ms to 45ms.",
+      implementedById: admin?.id,
+      proposedAt: daysAgo(15),
+      implementedAt: daysAgo(14),
+    },
+    {
+      key: "opt-tile-cache-redis-001",
+      title: "Add Redis caching for satellite tile serving",
+      description: "Tile serving was hitting database/storage on every request. Added Redis cache layer with 1-hour TTL for tile metadata.",
+      type: "caching_addition",
+      target: "tile-serving / /api/v1/satellite/tiles",
+      status: "completed",
+      beforeMetric: 180,
+      afterMetric: 18,
+      metricUnit: "ms",
+      metricName: "avg_tile_latency",
+      improvementPct: 90.0,
+      impactLevel: "critical",
+      impactNotes: "90% latency reduction. Tile serving throughput increased from 2K to 9.7K tiles/s. CDN hit rate: 95.5%.",
+      implementedById: admin?.id,
+      proposedAt: daysAgo(25),
+      implementedAt: daysAgo(22),
+    },
+    {
+      key: "opt-bundle-code-splitting-001",
+      title: "Code-split dashboard routes to reduce bundle size",
+      description: "Main bundle was 420KB. Implemented dynamic imports for each milestone dashboard tab to enable code-splitting.",
+      type: "bundle_size",
+      target: "Frontend bundle / next.js",
+      status: "completed",
+      beforeMetric: 420,
+      afterMetric: 285,
+      metricUnit: "KB",
+      metricName: "bundle_size",
+      improvementPct: 32.1,
+      impactLevel: "medium",
+      impactNotes: "32% bundle size reduction. Initial page load improved by 180ms. Lighthouse score: 78→92.",
+      implementedById: admin?.id,
+      proposedAt: daysAgo(10),
+      implementedAt: daysAgo(8),
+    },
+    {
+      key: "opt-image-webp-conversion-001",
+      title: "Convert satellite imagery to WebP format",
+      description: "Satellite tiles were PNG (large). Added automatic WebP conversion pipeline with fallback for older browsers.",
+      type: "image_optimization",
+      target: "Satellite imagery / tile serving",
+      status: "completed",
+      beforeMetric: 450,
+      afterMetric: 180,
+      metricUnit: "KB",
+      metricName: "avg_tile_size",
+      improvementPct: 60.0,
+      impactLevel: "high",
+      impactNotes: "60% image size reduction. Bandwidth savings: ~2.1TB/month. Mobile load time improved 40%.",
+      implementedById: admin?.id,
+      proposedAt: daysAgo(12),
+      implementedAt: daysAgo(10),
+    },
+    {
+      key: "opt-lazy-load-dashboard-001",
+      title: "Lazy-load dashboard tab content",
+      description: "All 26 dashboard tabs were rendering server-side on initial load. Implemented lazy loading — only active tab fetches data.",
+      type: "lazy_load",
+      target: "DashboardTabs / page.tsx",
+      status: "in_progress",
+      beforeMetric: 3200,
+      afterMetric: null,
+      metricUnit: "ms",
+      metricName: "initial_page_load",
+      improvementPct: null,
+      impactLevel: "high",
+      impactNotes: "Expected to reduce initial page load by ~60%. Currently in progress — measuring results.",
+      implementedById: admin?.id,
+      proposedAt: daysAgo(2),
+      implementedAt: null,
+    },
+  ];
+
+  for (const o of optimizations) {
+    await prisma.optimizationRecord.create({ data: o });
+    optimizationCount++;
+  }
+
+  console.log(`[seed] Seeded ${metricCount} performance metrics, ${loadTestCount} load tests, ${cacheCount} cache stats, ${scalingCount} scaling events, ${optimizationCount} optimization records.`);
 }
 
 main()

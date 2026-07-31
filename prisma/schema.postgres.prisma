@@ -2408,3 +2408,143 @@ model DisasterRecoveryPlan {
   @@index([readinessStatus])
   @@index([isActive])
 }
+
+// =============================================================================
+// MILESTONE 27 — Performance Hardening
+// =============================================================================
+model PerfMetric {
+  id              String   @id @default(cuid())
+  domain          String
+  metric          String
+  value           Float
+  unit            String
+  target          Float?
+  targetLabel     String?
+  trend           String   @default("flat")
+  trendPct        Float    @default(0)
+  status          String   @default("good")
+  capacityTier    String   @default("current")
+  description     String?
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([domain])
+  @@index([metric])
+  @@index([status])
+  @@index([capacityTier])
+  @@index([recordedAt])
+}
+
+model LoadTestRun {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  description     String?
+  type            String
+  status          String   @default("completed")
+  targetEndpoint  String
+  concurrentUsers Int
+  durationSec     Int
+  rampUpSec       Int      @default(60)
+  totalRequests   Int      @default(0)
+  successfulReqs  Int      @default(0)
+  failedReqs      Int      @default(0)
+  avgLatencyMs    Float    @default(0)
+  p50LatencyMs    Float    @default(0)
+  p95LatencyMs    Float    @default(0)
+  p99LatencyMs    Float    @default(0)
+  minLatencyMs    Float    @default(0)
+  maxLatencyMs    Float    @default(0)
+  requestsPerSec  Float    @default(0)
+  errorRate       Float    @default(0)
+  errorBreakdown  String?
+  cpuUsagePct     Float    @default(0)
+  memoryUsagePct  Float    @default(0)
+  dbConnections   Int      @default(0)
+  passed          Boolean  @default(true)
+  passCriteria    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  durationActual  Int?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([passed])
+  @@index([createdAt])
+}
+
+model CacheStats {
+  id              String   @id @default(cuid())
+  layer           String
+  cacheName       String
+  hitCount        Int      @default(0)
+  missCount       Int      @default(0)
+  hitRate         Float    @default(0)
+  evictionCount   Int      @default(0)
+  sizeBytes       Int      @default(0)
+  maxBytes        Int      @default(0)
+  entryCount      Int      @default(0)
+  avgGetLatencyMs Float    @default(0)
+  avgSetLatencyMs Float    @default(0)
+  defaultTtlSec   Int      @default(300)
+  status          String   @default("healthy")
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([layer])
+  @@index([cacheName])
+  @@index([status])
+  @@index([recordedAt])
+}
+
+model ScalingEvent {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  type            String
+  resource        String
+  trigger         String
+  description     String
+  fromCount       Int      @default(1)
+  toCount         Int      @default(1)
+  status          String   @default("completed")
+  triggeredAt     DateTime @default(now())
+  completedAt     DateTime?
+  durationSec     Int?
+  impactNotes     String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([resource])
+  @@index([status])
+  @@index([triggeredAt])
+}
+
+model OptimizationRecord {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  type            String
+  target          String
+  status          String   @default("proposed")
+  beforeMetric    Float?
+  afterMetric     Float?
+  metricUnit      String?
+  metricName      String?
+  improvementPct  Float?
+  impactLevel     String   @default("medium")
+  impactNotes     String?
+  proposedById    String?
+  implementedById String?
+  proposedAt      DateTime @default(now())
+  implementedAt   DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([impactLevel])
+  @@index([createdAt])
+}
