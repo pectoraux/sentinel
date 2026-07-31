@@ -387,6 +387,194 @@ async function seedIdentityData() {
   });
 
   console.log(`[seed] Seeded ${SAMPLE_ORGS.length} organizations, ${demoUsers.length} demo users with devices/verifications/trust.`);
+
+  console.log("[seed] Seeding M3 geospatial data...");
+  await seedGeoData();
+}
+
+// ---------------------------------------------------------------------------
+// M3 — Geospatial seed data (Ghana-focused: galamsey mining sites, water bodies, forest reserves)
+// ---------------------------------------------------------------------------
+
+const GEO_LAYERS = [
+  { key: "base-osm", name: "OpenStreetMap Base", type: "base", source: "osm", description: "Standard OSM basemap tiles", zIndex: 0, opacity: 1.0, config: JSON.stringify({ tileUrl: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19, attribution: "© OpenStreetMap" }) },
+  { key: "satellite", name: "Satellite Imagery", type: "base", source: "sentinel", description: "Sentinel-2 satellite imagery", zIndex: 0, opacity: 1.0, config: JSON.stringify({ tileUrl: "", maxZoom: 18 }) },
+  { key: "mining-sites", name: "Mining Sites", type: "data", source: "internal", description: "Known and suspected illegal mining (galamsey) sites", zIndex: 10, opacity: 0.9 },
+  { key: "water-bodies", name: "Water Bodies", type: "data", source: "internal", description: "Rivers, lakes, and water bodies at risk from mining pollution", zIndex: 9, opacity: 0.8 },
+  { key: "forest-reserves", name: "Forest Reserves", type: "data", source: "internal", description: "Protected forest reserves under threat from illegal mining", zIndex: 8, opacity: 0.7 },
+  { key: "settlements", name: "Settlements", type: "data", source: "internal", description: "Nearby communities affected by mining", zIndex: 7, opacity: 0.8 },
+  { key: "hot-zones", name: "Hot Zones", type: "overlay", source: "internal", description: "Active mining hot zones (cluster analysis)", zIndex: 15, opacity: 0.5 },
+];
+
+// Ghana coordinates: lng ~ -3.2 to 1.2, lat ~ 4.7 to 11.1
+const SAMPLE_POIS = [
+  // Mining sites (galamsey) — Pra River basin, Ashanti region
+  { name: "Prestea Galamsey Site A", type: "mining_site", lat: 5.4321, lng: -2.1456, status: "active", severity: "critical", country: "GH", region: "Western" },
+  { name: "Dunkwa Mining Complex", type: "mining_site", lat: 5.9783, lng: -1.7822, status: "monitored", severity: "high", country: "GH", region: "Central" },
+  { name: "Obuasi Illegal Pit", type: "mining_site", lat: 6.2062, lng: -1.6678, status: "active", severity: "critical", country: "GH", region: "Ashanti" },
+  { name: "Bibiani North Site", type: "mining_site", lat: 6.4639, lng: -2.3322, status: "monitored", severity: "high", country: "GH", region: "Western North" },
+  { name: "Tarkwa Nsuaem Cluster", type: "mining_site", lat: 5.3056, lng: -1.9933, status: "active", severity: "critical", country: "GH", region: "Western" },
+  { name: "Ayanfuri Alluvial", type: "mining_site", lat: 6.2345, lng: -1.8901, status: "verified", severity: "medium", country: "GH", region: "Central" },
+  { name: "Konongo Pit", type: "mining_site", lat: 6.6217, lng: -1.0756, status: "active", severity: "high", country: "GH", region: "Ashanti" },
+  { name: "Kibi Galamsey", type: "mining_site", lat: 6.1667, lng: -0.5500, status: "monitored", severity: "high", country: "GH", region: "Eastern" },
+  { name: "Asankrangwa Site", type: "mining_site", lat: 5.8333, lng: -2.0833, status: "active", severity: "medium", country: "GH", region: "Western" },
+  { name: "Bonte River Mining", type: "mining_site", lat: 5.5500, lng: -1.8500, status: "closed", severity: "low", country: "GH", region: "Central" },
+  // Water bodies
+  { name: "Pra River Confluence", type: "water_body", lat: 5.2767, lng: -1.8767, status: "active", country: "GH", region: "Central" },
+  { name: "Ankobra River Mouth", type: "water_body", lat: 4.8667, lng: -2.3500, status: "active", country: "GH", region: "Western" },
+  { name: "Offin River Bend", type: "water_body", lat: 6.3500, lng: -1.8500, status: "active", country: "GH", region: "Ashanti" },
+  { name: "Birim River Crossing", type: "water_body", lat: 6.0500, lng: -0.8500, status: "active", country: "GH", region: "Eastern" },
+  { name: "Volta Lake North", type: "water_body", lat: 7.8000, lng: -0.4500, status: "active", country: "GH", region: "Volta" },
+  { name: "Tano River Upper", type: "water_body", lat: 7.2000, lng: -2.6000, status: "active", country: "GH", region: "Bono" },
+  // Settlements
+  { name: "Prestea Town", type: "settlement", lat: 5.4300, lng: -2.1400, status: "active", country: "GH", region: "Western" },
+  { name: "Obuasi Municipality", type: "settlement", lat: 6.2000, lng: -1.6700, status: "active", country: "GH", region: "Ashanti" },
+  { name: "Dunkwa-on-Offin", type: "settlement", lat: 5.9700, lng: -1.7800, status: "active", country: "GH", region: "Central" },
+  { name: "Kibi Township", type: "settlement", lat: 6.1700, lng: -0.5500, status: "active", country: "GH", region: "Eastern" },
+  { name: "Tarkwa Town", type: "settlement", lat: 5.3000, lng: -1.9900, status: "active", country: "GH", region: "Western" },
+  // Sensor stations
+  { name: "Pra River Sensor S1", type: "sensor_station", lat: 5.2800, lng: -1.8700, status: "active", country: "GH", region: "Central" },
+  { name: "Ankobra Sensor S2", type: "sensor_station", lat: 4.8700, lng: -2.3500, status: "active", country: "GH", region: "Western" },
+  { name: "Obuasi Air Quality S3", type: "sensor_station", lat: 6.2100, lng: -1.6700, status: "active", country: "GH", region: "Ashanti" },
+  // Checkpoints
+  { name: "Prestea Checkpoint C1", type: "checkpoint", lat: 5.4350, lng: -2.1430, status: "active", country: "GH", region: "Western" },
+  { name: "Obuasi Checkpoint C2", type: "checkpoint", lat: 6.2090, lng: -1.6680, status: "active", country: "GH", region: "Ashanti" },
+  // Incidents
+  { name: "Cyanide Spill Report", type: "incident", lat: 5.4310, lng: -2.1440, status: "verified", severity: "critical", country: "GH", region: "Western" },
+  { name: "River Diversion Report", type: "incident", lat: 6.2050, lng: -1.6680, status: "active", severity: "high", country: "GH", region: "Ashanti" },
+  { name: "Forest Clearing Report", type: "incident", lat: 6.4650, lng: -2.3300, status: "active", severity: "high", country: "GH", region: "Western North" },
+];
+
+const SAMPLE_REGIONS = [
+  {
+    name: "Prestea Mining Concession",
+    type: "mining_concession",
+    coordinates: [[-2.1500, 5.4200], [-2.1300, 5.4200], [-2.1300, 5.4400], [-2.1500, 5.4400], [-2.1500, 5.4200]] as [number, number][],
+    country: "GH",
+    region: "Western",
+  },
+  {
+    name: "Obuasi Mining Belt",
+    type: "mining_concession",
+    coordinates: [[-1.6900, 6.1900], [-1.6400, 6.1900], [-1.6400, 6.2200], [-1.6900, 6.2200], [-1.6900, 6.1900]] as [number, number][],
+    country: "GH",
+    region: "Ashanti",
+  },
+  {
+    name: "Upper Pra River Basin",
+    type: "water_body",
+    coordinates: [[-2.2000, 5.8000], [-1.7000, 5.8000], [-1.7000, 6.2000], [-2.2000, 6.2000], [-2.2000, 5.8000]] as [number, number][],
+    country: "GH",
+    region: "Central",
+  },
+  {
+    name: "Atewa Forest Reserve",
+    type: "forest_reserve",
+    coordinates: [[-0.6000, 6.1000], [-0.5000, 6.1000], [-0.5000, 6.2500], [-0.6000, 6.2500], [-0.6000, 6.1000]] as [number, number][],
+    country: "GH",
+    region: "Eastern",
+  },
+  {
+    name: "Tarkwa-Prestea Hot Zone",
+    type: "hot_zone",
+    coordinates: [[-2.2000, 5.2000], [-1.9000, 5.2000], [-1.9000, 5.6000], [-2.2000, 5.6000], [-2.2000, 5.2000]] as [number, number][],
+    country: "GH",
+    region: "Western",
+  },
+  {
+    name: "Birim River Protected Area",
+    type: "protected_area",
+    coordinates: [[-0.9000, 5.9000], [-0.7000, 5.9000], [-0.7000, 6.2000], [-0.9000, 6.2000], [-0.9000, 5.9000]] as [number, number][],
+    country: "GH",
+    region: "Eastern",
+  },
+];
+
+async function seedGeoData() {
+  // Create layers
+  const layerMap: Record<string, string> = {};
+  for (const layer of GEO_LAYERS) {
+    const created = await prisma.geoLayer.upsert({
+      where: { key: layer.key },
+      create: {
+        key: layer.key,
+        name: layer.name,
+        type: layer.type,
+        source: layer.source,
+        description: layer.description,
+        zIndex: layer.zIndex,
+        opacity: layer.opacity,
+        visible: layer.type === "base" ? true : layer.key === "mining-sites" || layer.key === "water-bodies" || layer.key === "forest-reserves",
+        config: layer.config ?? null,
+      },
+      update: {},
+    });
+    layerMap[layer.key] = created.id;
+  }
+
+  // Create POIs
+  let poiCount = 0;
+  for (const poi of SAMPLE_POIS) {
+    const layerKey = poi.type === "mining_site" ? "mining-sites"
+      : poi.type === "water_body" ? "water-bodies"
+      : poi.type === "settlement" ? "settlements"
+      : poi.type === "incident" ? "mining-sites"
+      : "mining-sites";
+    const geojson = JSON.stringify({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [poi.lng, poi.lat] },
+      properties: { name: poi.name, type: poi.type, status: poi.status, severity: poi.severity },
+    });
+    await prisma.pointOfInterest.create({
+      data: {
+        name: poi.name,
+        type: poi.type,
+        lat: poi.lat,
+        lng: poi.lng,
+        geojson,
+        layerId: layerMap[layerKey],
+        country: poi.country,
+        region: poi.region,
+        status: poi.status,
+        severity: poi.severity,
+      },
+    }).catch(() => {}); // skip duplicates on re-seed
+    poiCount++;
+  }
+
+  // Create regions
+  let regionCount = 0;
+  for (const region of SAMPLE_REGIONS) {
+    const layerKey = region.type === "forest_reserve" ? "forest-reserves"
+      : region.type === "water_body" ? "water-bodies"
+      : region.type === "hot_zone" ? "hot-zones"
+      : "mining-sites";
+    const geojson = JSON.stringify({
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [region.coordinates] },
+      properties: { name: region.name, type: region.type },
+    });
+    const minLng = Math.min(...region.coordinates.map((c) => c[0]));
+    const maxLng = Math.max(...region.coordinates.map((c) => c[0]));
+    const minLat = Math.min(...region.coordinates.map((c) => c[1]));
+    const maxLat = Math.max(...region.coordinates.map((c) => c[1]));
+    await prisma.spatialRegion.create({
+      data: {
+        name: region.name,
+        type: region.type,
+        geojson,
+        bbox: JSON.stringify({ minLng, minLat, maxLng, maxLat }),
+        areaKm2: (maxLng - minLng) * 111 * (maxLat - minLat) * 111,
+        layerId: layerMap[layerKey],
+        country: region.country,
+        region: region.region,
+        status: "active",
+      },
+    }).catch(() => {});
+    regionCount++;
+  }
+
+  console.log(`[seed] Seeded ${GEO_LAYERS.length} layers, ${poiCount} POIs, ${regionCount} spatial regions.`);
 }
 
 main()

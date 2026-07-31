@@ -547,3 +547,93 @@ model ActiveRole {
 
   @@index([userId])
 }
+
+// =============================================================================
+// MILESTONE 3 — Geospatial Platform (GIS Engine)
+// =============================================================================
+
+model PointOfInterest {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  lat         Float
+  lng         Float
+  geojson     String?
+  layerId     String?
+  country     String?
+  region      String?
+  status      String   @default("active")
+  severity    String?
+  metadata    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  layer       GeoLayer? @relation(fields: [layerId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([status])
+  @@index([country])
+  @@index([layerId])
+  @@index([lng, lat])
+}
+
+model SpatialRegion {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  geojson     String
+  bbox        String?
+  areaKm2     Float?
+  country     String?
+  region      String?
+  layerId     String?
+  status      String   @default("active")
+  metadata    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  layer       GeoLayer? @relation(fields: [layerId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([country])
+  @@index([layerId])
+}
+
+model GeoLayer {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  type        String
+  source      String
+  description String?
+  visible     Boolean  @default(true)
+  zIndex      Int      @default(0)
+  opacity     Float    @default(1.0)
+  config      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  points      PointOfInterest[]
+  regions     SpatialRegion[]
+
+  @@index([type])
+  @@index([visible])
+}
+
+model GeoTileManifest {
+  id          String   @id @default(cuid())
+  layerId     String
+  z           Int
+  x           Int
+  y           Int
+  status      String   @default("pending")
+  etag        String?
+  sizeBytes   Int      @default(0)
+  cachedAt    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([layerId, z, x, y])
+  @@index([layerId, z])
+  @@index([status])
+}

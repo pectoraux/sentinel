@@ -119,3 +119,35 @@ Stage Summary:
 - 18 new API routes, all versioned under /api/v1/ with RBAC enforcement.
 - Identity bounded context follows the same DDD + EDA patterns as M1 (aggregate roots, domain events, transactional outbox, audit handler auto-records all identity events).
 - Future milestones (M3 Intelligence, M4 Digital Twin, M5 Community) plug into this trust layer: reports submitted by verified users carry their trust score, org-scoped actions use the role-switch context, device trust gates sensitive operations.
+
+---
+Task ID: M3
+Agent: orchestrator
+Task: Milestone 3 — Geospatial Platform (GIS Engine)
+
+Work Log:
+- Extended Prisma schema (both SQLite + PostgreSQL) with 4 new models: PointOfInterest (lat/lng/geojson/bbox-indexed), SpatialRegion (polygon geojson + bbox + areaKm2), GeoLayer (base/overlay/data/vector layers with visibility/opacity/zIndex), GeoTileManifest (tile cache tracking by z/x/y + quadkey).
+- Extended prisma/sql/postgis.sql with production PostGIS columns: PointOfInterest.geoPoint (geography(Point,4326) with GIST index + auto-sync trigger from lat/lng), SpatialRegion.geoPolygon (geography(Polygon,4326) with GIST index). Added 3 PostGIS stored functions: find_pois_within_radius (ST_DWithin), find_pois_within_polygon (ST_Contains), find_nearest_pois (KNN <-> operator).
+- Built Geo bounded context (src/modules/geo/):
+  - Domain/spatial: coordinate-transforms.ts — WGS84↔Web Mercator (EPSG:3857), WGS84↔pixel, WGS84↔tile (XYZ scheme), tile↔quadkey (Bing quadtree), bbox computation, MGRS conversion (UTM-based). spatial-algorithms.ts — Haversine distance, bearing, point-in-polygon (ray-casting + GeoJSON holes), polygon area (shoelace + lat-corrected km²), centroid, findWithinRadius (bbox pre-filter + Haversine), findNearest, findWithinPolygon, findWithinBBox, great-circle interpolation, KDTree (2D k-d tree for O(log n) nearest-neighbor).
+  - Domain/geojson.ts — GeoJSON types (Point, LineString, Polygon, MultiPolygon, Feature, FeatureCollection) + builders + serialize/parse.
+  - Application/services: POIService (CRUD + findWithinRadius/findNearest/findWithinPolygon — abstracts SQLite TS vs PostgreSQL PostGIS), RegionService (polygon CRUD with auto bbox + area), LayerService (list/toggle/opacity), TileService (tileForCoordinate + tilesForBBox + manifest), SpatialQueryService (summary + GeoJSON export).
+- Built 10 API routes under /api/v1/geo/: summary (public), pois (GET list with bbox/type/status filter, POST create), regions (GET list, POST create), nearest (GET distance query), within-radius (GET radius query), within-polygon (POST polygon query), layers (GET list), layers/[key] (PATCH toggle), tiles (GET tile info for coord or bbox), export (GET GeoJSON export). All public endpoints return 200, auth-gated return 401.
+- Seed: 7 map layers (OSM base, satellite, mining-sites, water-bodies, forest-reserves, settlements, hot-zones), 29 POIs across Ghana (10 mining sites, 6 water bodies, 5 settlements, 3 sensors, 2 checkpoints, 3 incidents — all with real coordinates in the Prestea/Obuasi/Tarkwa galamsey belt), 6 spatial regions (mining concessions, river basins, forest reserves, hot zones, protected areas — with polygon coordinates).
+- UI: Built CanvasMap component — self-contained HTML5 Canvas map renderer with Web Mercator projection, pan (drag) and zoom (wheel/buttons), POI markers colored by type (mining=red, water=blue, settlement=purple, sensor=green, checkpoint=amber), severity rings (critical=dark red), polygon region rendering (fill+stroke+label), lat/lng grid overlay with zoom-adaptive intervals, tile boundary overlay (XYZ scheme), hover tooltips with POI details, click-to-select, coordinate readout. No external tile server dependency (works offline in sandbox).
+- Built GeospatialDashboard component: 6 KPIs (POIs, regions, layers, visible POIs, query results, spatial engine), interactive map with layer toggles + grid/tile overlays + zoom controls, spatial query panel (nearest 5 POIs + within 20km radius — calls the API and displays results with distance), selected POI detail card, POI distribution chart, region/layer stats.
+- Updated DashboardTabs to 3 tabs (Geospatial default, Identity & Trust, Platform Foundation). Updated hero, header badge, footer, checklist to reflect M3.
+- Fixed: missing local-storage.ts file (recreated), import path fix in geo.service.ts (../../domain/ instead of ../domain/).
+- `bun run lint` → 0 errors, 0 warnings. `bun run test` → 60/60 pass.
+- Agent Browser verification (single session):
+  • All 10 API endpoints return HTTP 200.
+  • Spatial queries verified: nearest query correctly finds Dunkwa Mining Complex (3.1km), Dunkwa-on-Offin (4.0km), Obuasi (26.5km) from center point. Within-radius returns 2 POIs within 20km.
+  • Geospatial tab (default): canvas map renders, Layers panel with 7 toggleable layers, Spatial Queries panel with Nearest/Radius buttons, "Geospatial Platform" hero text.
+  • Tab switching works all 3 ways (Geospatial → Identity → Foundation → Geospatial).
+  • Foundation tab shows PostGIS in checklist.
+  • Responsive: no horizontal scroll at 390px. No console errors.
+
+Stage Summary:
+- Milestone 3 (Geospatial Platform) is COMPLETE and browser-verified.
+- Delivered: PostGIS schema + spatial functions (production), TypeScript spatial engine (dev) with Haversine distance, point-in-polygon (ray-casting), k-d tree nearest-neighbor, coordinate transforms (WGS84↔Mercator↔tile↔quadkey↔MGRS), polygon area/centroid, great-circle interpolation. Map rendering with canvas-based Web Mercator projection, pan/zoom, POI markers, polygon regions, grid/tile overlays, layer system. 29 real Ghana mining-site POIs + 6 polygon regions seeded. 10 API routes with spatial query support.
+- The GIS engine is designed so M4 (Intelligence) can geo-reference detection results, M5 (Digital Twin) can render simulation overlays, and M6 (Community) can submit geo-tagged reports — all through the same spatial query API.

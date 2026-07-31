@@ -2,32 +2,35 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users } from "lucide-react";
+import { ShieldCheck, Users, Map } from "lucide-react";
 
 interface Tab {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   description: string;
+  short: string;
 }
 
 const TABS: Tab[] = [
-  { id: "foundation", label: "Platform Foundation", icon: ShieldCheck, description: "M1 · Architecture & subsystems" },
-  { id: "identity", label: "Identity & Trust", icon: Users, description: "M2 · Organizations · Devices · Trust" },
+  { id: "geo", label: "Geospatial", icon: Map, description: "M3 · GIS engine · Maps · Layers · Spatial queries", short: "M3" },
+  { id: "identity", label: "Identity & Trust", icon: Users, description: "M2 · Organizations · Devices · Trust", short: "M2" },
+  { id: "foundation", label: "Platform Foundation", icon: ShieldCheck, description: "M1 · Architecture & subsystems", short: "M1" },
 ];
 
 export function DashboardTabs({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = React.useState<string>("identity");
+  const [active, setActive] = React.useState<string>("geo");
 
   const childrenArray = React.Children.toArray(children);
-  const foundation = childrenArray[0] ?? null;
+  const geo = childrenArray[0] ?? null;
   const identity = childrenArray[1] ?? null;
+  const foundation = childrenArray[2] ?? null;
 
   return (
     <div>
       {/* Tab bar */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex rounded-lg border border-border bg-card p-1">
+        <div className="inline-flex flex-wrap rounded-lg border border-border bg-card p-1">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = active === tab.id;
@@ -46,7 +49,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{tab.label}</span>
-                <span className="sm:hidden">{tab.id === "foundation" ? "M1" : "M2"}</span>
+                <span className="sm:hidden">{tab.short}</span>
               </button>
             );
           })}
@@ -58,8 +61,9 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
 
       {/* Tab content */}
       <div role="tabpanel">
-        {active === "foundation" && foundation}
+        {active === "geo" && geo}
         {active === "identity" && identity}
+        {active === "foundation" && foundation}
       </div>
     </div>
   );

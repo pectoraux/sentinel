@@ -527,3 +527,110 @@ model ActiveRole {
 
   @@index([userId])
 }
+
+// =============================================================================
+// MILESTONE 3 — Geospatial Platform (GIS Engine)
+// =============================================================================
+// PointOfInterest, SpatialRegion (polygons), GeoLayer (map layers).
+//
+// On SQLite (dev): lat/lng stored as Float, geojson as String (JSON).
+// On PostgreSQL+PostGIS (prod): numeric columns + native geography(Point/Polygon)
+// columns added via prisma/sql/postgis.sql (Prisma has no native geometry type).
+// The SpatialQueryService abstracts both: dev uses Haversine + ray-casting in
+// TypeScript; prod delegates to ST_DWithin / ST_Contains / ST_Distance.
+// =============================================================================
+
+model PointOfInterest {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // mining_site | water_body | forest_reserve | settlement | sensor_station | incident | checkpoint
+  lat         Float
+  lng         Float
+  // geojson: full GeoJSON Feature as JSON string (includes properties, geometry)
+  geojson     String?
+  layerId     String?
+  country     String?  // ISO code e.g. "GH"
+  region      String?
+  status      String   @default("active") // active | monitored | closed | verified | false_positive
+  severity    String?  // low | medium | high | critical (for incidents)
+  metadata    String?  // JSON: { confidence, source, reportCount, ... }
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  layer       GeoLayer? @relation(fields: [layerId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([status])
+  @@index([country])
+  @@index([layerId])
+  // Composite index for bounding-box queries (lng range then lat range)
+  @@index([lng, lat])
+}
+
+model SpatialRegion {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // protected_area | forest_reserve | water_body | mining_concession | administrative_boundary | hot_zone
+  // geojson: GeoJSON Polygon/MultiPolygon as JSON string
+  // For dev (SQLite), the polygon coordinates are in geojson. For prod, a
+  // geography(Polygon,4326) column is also added via postgis.sql.
+  geojson     String
+  // bbox: [minLng, minLat, maxLng, maxLat] as JSON for fast pre-filtering
+  bbox        String?
+  areaKm2     Float?
+  country     String?
+  region      String?
+  layerId     String?
+  status      String   @default("active")
+  metadata    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  layer       GeoLayer? @relation(fields: [layerId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([country])
+  @@index([layerId])
+}
+
+model GeoLayer {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. "osm-base", "satellite", "mining-sites", "forest-reserves"
+  name        String
+  type        String   // base | overlay | data | vector
+  source      String   // osm | sentinel | landsat | custom | internal
+  description String?
+  visible     Boolean  @default(true)
+  zIndex      Int      @default(0)
+  opacity     Float    @default(1.0)
+  // config: JSON — tile URL template, style params, etc.
+  // e.g. { "tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "maxZoom": 19 }
+  config      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  points      PointOfInterest[]
+  regions     SpatialRegion[]
+
+  @@index([type])
+  @@index([visible])
+}
+
+model GeoTileManifest {
+  id          String   @id @default(cuid())
+  layerId     String
+  z           Int      // zoom level
+  x           Int      // tile column
+  y           Int      // tile row (XYZ scheme)
+  // status: cached | stale | pending | unavailable
+  status      String   @default("pending")
+  etag        String?
+  sizeBytes   Int      @default(0)
+  cachedAt    DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([layerId, z, x, y])
+  @@index([layerId, z])
+  @@index([status])
+}

@@ -40,12 +40,14 @@ import { FeatureFlagsPanel } from "@/components/sentinel/feature-flags-panel";
 import { HealthLiveView } from "@/components/sentinel/health-live-view";
 import { DashboardTabs } from "@/components/sentinel/dashboard-tabs";
 import { IdentityDashboard } from "@/components/sentinel/identity-dashboard";
+import { GeospatialDashboard } from "@/components/sentinel/geo/geospatial-dashboard";
+import { getPOIService, getRegionService, getLayerService, getSpatialQueryService } from "@/modules/geo";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function DashboardPage() {
-  // Fetch ALL dashboard data server-side in parallel (M1 + M2).
+  // Fetch ALL dashboard data server-side in parallel (M1 + M2 + M3).
   const [
     health,
     flags,
@@ -53,6 +55,10 @@ export default async function DashboardPage() {
     roles,
     telemetry,
     identitySummaryRaw,
+    geoSummary,
+    geoPoisRaw,
+    geoRegionsRaw,
+    geoLayersRaw,
   ] = await Promise.all([
     getHealthService().runAll(),
     getFeatureFlagService().list(),
@@ -60,7 +66,38 @@ export default async function DashboardPage() {
     getIamService().listRoles(),
     Promise.resolve(getTelemetryState()),
     fetchIdentitySummary(),
+    getSpatialQueryService().summary(),
+    getPOIService().list({ limit: 500 }),
+    getRegionService().list(),
+    getLayerService().list(),
   ]);
+
+  // Transform geo data for the map client component
+  const geoPois = geoPoisRaw.pois.map((p) => ({
+    id: p.id,
+    name: p.name,
+    type: p.type,
+    lat: p.lat,
+    lng: p.lng,
+    status: p.status,
+    severity: p.severity,
+  }));
+  const geoRegions = geoRegionsRaw.regions
+    .filter((r) => r.geojson?.geometry?.type === "Polygon")
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      coordinates: r.geojson!.geometry.coordinates[0] as [number, number][],
+      areaKm2: r.areaKm2,
+    }));
+  const geoLayers = geoLayersRaw.layers.map((l) => ({
+    key: l.key,
+    name: l.name,
+    type: l.type,
+    visible: l.visible,
+    opacity: l.opacity,
+  }));
 
   const metricsSnapshot = metrics.snapshot();
   const safeConfig = safeConfigSnapshot();
@@ -94,7 +131,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight">Sentinel</h1>
                 <Badge variant="outline" className="hidden sm:inline-flex text-[10px] uppercase tracking-wide">
-                  M2 · Identity &amp; Trust
+                  M3 · Geospatial
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground hidden sm:block">
@@ -123,12 +160,12 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Identity &amp; Trust Platform
+                Geospatial Platform
               </h2>
               <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                Multi-tenant organizations, identity verification, trust profiles, device
-                management, sessions, and role switching — the trust layer for Sentinel&apos;s
-                intelligence network across Africa.
+                Full GIS engine: PostGIS spatial queries, Web Mercator map rendering, layer
+                management, tile math (XYZ + quadkeys), coordinate transforms, distance &amp;
+                polygon queries — the geospatial foundation for environmental intelligence.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -143,12 +180,23 @@ export default async function DashboardPage() {
         </section>
 
         <DashboardTabs>
-          {/* === M1: Foundation (first child = first tab) === */}
+          {/* === M3: Geospatial (first child = first tab, default) === */}
+          <GeospatialDashboard
+            initialSummary={geoSummary}
+            initialPois={geoPois}
+            initialRegions={geoRegions}
+            initialLayers={geoLayers}
+          />
+
+          {/* === M2: Identity & Trust (second child = second tab) === */}
+          <IdentityDashboard initial={identitySummaryRaw} />
+
+          {/* === M1: Foundation (third child = third tab) === */}
           <div>
             {/* KPI row */}
             <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <Kpi icon={Boxes} label="Subsystems" value={String(subsystems.length)} hint="operational" />
-              <Kpi icon={Layers} label="Bounded Contexts" value="4" hint="iam · audit · flags · identity" />
+              <Kpi icon={Layers} label="Bounded Contexts" value="5" hint="iam · audit · flags · identity · geo" />
               <Kpi icon={KeyRound} label="RBAC Roles" value={String(roles.length)} hint="seeded" />
               <Kpi icon={Flag} label="Feature Flags" value={String(flags.length)} hint={`${flags.filter((f) => f.enabled).length} active`} />
               <Kpi icon={GitBranch} label="Outbox Pending" value={String(outboxPending)} hint="events" />
@@ -377,9 +425,12 @@ export default async function DashboardPage() {
                     "M2: Device Management",
                     "M2: Session Management",
                     "M2: Role Switching",
-                    "M3: Intelligence Engine (next)",
-                    "M4: Digital Twin (next)",
-                    "M5: Community Reporting (next)",
+                    "M3: PostGIS · Spatial Queries · Indexing",
+                    "M3: Map Rendering · Layers · Tiles",
+                    "M3: Coordinate Transforms · Quadkeys",
+                    "M3: Distance · Polygon · Nearest-Neighbor",
+                    "M4: Intelligence Engine (next)",
+                    "M5: Digital Twin (next)",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-xs">
                       <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-success" />
@@ -390,9 +441,6 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-
-          {/* === M2: Identity & Trust (second child = second tab, default) === */}
-          <IdentityDashboard initial={identitySummaryRaw} />
         </DashboardTabs>
       </main>
 
@@ -401,12 +449,13 @@ export default async function DashboardPage() {
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-2 px-4 py-4 sm:flex-row sm:px-6">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-            <span>Sentinel Platform · M2 — Identity &amp; Trust</span>
+            <span>Sentinel Platform · M3 — Geospatial</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
             <Link href="/api/v1/info" className="hover:text-foreground transition-colors">API</Link>
             <Link href="/api/v1/health" className="hover:text-foreground transition-colors">Health</Link>
             <Link href="/api/v1/system" className="hover:text-foreground transition-colors">System</Link>
+            <Link href="/api/v1/geo/summary" className="hover:text-foreground transition-colors">Geo</Link>
             <Link href="/api/v1/identity-summary" className="hover:text-foreground transition-colors">Identity</Link>
             <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Secrets redacted</span>
           </div>
