@@ -3423,3 +3423,194 @@ model DeploymentPipeline {
   @@index([status])
   @@index([createdAt])
 }
+
+// =============================================================================
+// AUTONOMOUS INVESTIGATION ENGINE
+// =============================================================================
+// When an Intelligence Event is created — by a citizen or by the Digital Twin —
+// the AI automatically becomes an investigator. It:
+//   1. Gathers nearby historical events (spatial + temporal context)
+//   2. Compares recent satellite imagery with older imagery (change detection)
+//   3. Identifies affected rivers, forests, and communities (impact analysis)
+//   4. Requests additional evidence from trusted nearby contributors (auto-missions)
+//   5. Explains why it believes the event is credible (or not) — reasoning chain
+//   6. Continuously updates confidence as new evidence arrives (Bayesian updates)
+//   7. Recommends the next best action (dispatch inspector, drone, wait, escalate)
+//
+// This transforms Sentinel from a reporting platform into an AI-powered
+// environmental investigation system.
+// =============================================================================
+
+model AutonomousInvestigation {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  // linked intelligence event that triggered this investigation
+  intelligenceEventId String?
+  triggerSource   String   // citizen_report | digital_twin | satellite_change | cv_detection | ai_observation | fraud_alert | manual
+  triggerDescription String?
+  // location
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  region          String?
+  // investigation status
+  // triggered → gathering_context → analyzing_imagery → identifying_impacts → requesting_evidence → reasoning → monitoring → concluded
+  status          String   @default("triggered")
+  currentPhase    String   @default("triggered")
+  // confidence (Bayesian — updates as new evidence arrives)
+  confidence      Float    @default(0.5) // 0.0 (not credible) → 1.0 (highly credible)
+  confidenceLevel String   @default("uncertain") // very_low | low | uncertain | moderate | high | very_high
+  confidenceTrend String   @default("stable") // increasing | decreasing | stable
+  // AI reasoning
+  credibilityAssessment String? // human-readable explanation of why the event is/isn't credible
+  reasoningChain  String?  // JSON: array of reasoning steps
+  // evidence gathered
+  historicalEventsFound Int @default(0)
+  satelliteChangesDetected Int @default(0)
+  affectedEntitiesCount Int @default(0)
+  evidenceRequested Int @default(0)
+  evidenceReceived  Int @default(0)
+  // action recommendation
+  recommendedAction String? // dispatch_inspector | request_drone | wait_for_corroboration | escalate | dismiss | monitor
+  actionReasoning  String?
+  actionConfidence Float?
+  // linked entities (JSON arrays)
+  nearbyEventIds   String?  // JSON
+  affectedEntityIds String? // JSON
+  missionIds       String?  // JSON — auto-created missions
+  satelliteSceneIds String? // JSON — compared scenes
+  // AI model
+  model            String   @default("auto-investigator-v1")
+  // timing
+  triggeredAt      DateTime @default(now())
+  lastUpdated      DateTime @default(now())
+  concludedAt      DateTime?
+  // metadata
+  metadata         String?  // JSON
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  phases           InvestigationPhase[]
+  evidenceRequests EvidenceRequest[]
+  confidenceUpdates ConfidenceUpdate[]
+  recommendations  ActionRecommendation[]
+
+  @@index([status])
+  @@index([currentPhase])
+  @@index([confidenceLevel])
+  @@index([triggerSource])
+  @@index([region])
+  @@index([triggeredAt])
+  @@index([confidence])
+}
+
+model InvestigationPhase {
+  id              String   @id @default(cuid())
+  investigationId String
+  // phase: triggered | gathering_context | analyzing_imagery | identifying_impacts | requesting_evidence | reasoning | monitoring | concluded
+  phase           String
+  title           String
+  description     String
+  // results
+  findings        String?  // JSON — what the AI found in this phase
+  durationMs      Int?
+  // status
+  status          String   @default("pending") // pending | in_progress | completed | failed
+  // timing
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([phase])
+  @@index([status])
+}
+
+model EvidenceRequest {
+  id              String   @id @default(cuid())
+  investigationId String
+  // what evidence is being requested
+  requestType     String   // photo | video | water_sample | gps_verification | witness_statement | drone_footage
+  description     String
+  // who is being asked
+  targetUserId    String?
+  targetUserName  String?
+  targetTrustTier String?
+  distanceKm      Float?   // distance from the user to the event location
+  // linked mission (if a mission was auto-created)
+  missionId       String?
+  // status
+  status          String   @default("pending") // pending | accepted | submitted | verified | declined | expired
+  // result
+  submittedAt     DateTime?
+  evidenceId      String?  // evidence ID if submitted
+  qualityScore    Float?   // quality of submitted evidence
+  // timing
+  requestedAt     DateTime @default(now())
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([status])
+  @@index([requestType])
+}
+
+model ConfidenceUpdate {
+  id              String   @id @default(cuid())
+  investigationId String
+  // previous and new confidence
+  previousConfidence Float
+  newConfidence      Float
+  delta              Float  // change (+ or -)
+  // what caused the update
+  trigger         String   // evidence_received | satellite_analyzed | mission_completed | corroboration_added | fraud_detected | time_decay | initial
+  description     String
+  // Bayesian factors
+  priorProbability Float?
+  likelihoodRatio  Float?
+  posteriorProbability Float?
+  // timing
+  updatedAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([trigger])
+  @@index([updatedAt])
+}
+
+model ActionRecommendation {
+  id              String   @id @default(cuid())
+  investigationId String
+  // recommended action
+  action          String   // dispatch_inspector | request_drone | wait_for_corroboration | escalate | dismiss | monitor | request_lab_analysis | notify_agency
+  priority        String   @default("medium") // low | medium | high | urgent
+  title           String
+  reasoning       String
+  // confidence in the recommendation
+  confidence      Float    @default(0.7)
+  // expected impact
+  expectedOutcome String?
+  // status
+  status          String   @default("pending") // pending | accepted | rejected | executed
+  executedAt      DateTime?
+  executedById    String?
+  executionNotes  String?
+  // timing
+  recommendedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([action])
+  @@index([status])
+  @@index([priority])
+}

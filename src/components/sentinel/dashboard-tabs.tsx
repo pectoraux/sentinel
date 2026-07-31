@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark, FlaskConical, BarChart3, Code2, ShieldAlert, Gauge, ClipboardCheck } from "lucide-react";
+import { ShieldCheck, Users, Map, Box, Clock, Network, FileText, Radio, Scale, Shield, Bell, Satellite, Eye, Brain, Layers, TrendingUp, Crosshair, MessageSquare, Target, Award, AlertTriangle, Landmark, FlaskConical, BarChart3, Code2, ShieldAlert, Gauge, ClipboardCheck, Sparkles } from "lucide-react";
 
 interface Tab {
   id: string;
@@ -24,6 +24,7 @@ const TABS: Tab[] = [
   { id: "rewards", label: "Reward Engine", icon: Award, description: "M20 · Donation pools · NGO funding · Government grants · Transparent distribution · Contribution scoring · Hash-chained ledger", short: "M20" },
   { id: "missions", label: "Mission System", icon: Target, description: "M19 · AI creates missions when confidence is low · Nearby trusted users gather evidence · Rewards based on verification quality", short: "M19" },
   { id: "copilot", label: "AI Copilot", icon: MessageSquare, description: "M18 · Natural language interface to the Digital Twin · Real LLM · Ask questions about mines, rivers, forests, predictions, confidence", short: "M18" },
+  { id: "autonomous", label: "Auto-Investigator", icon: Sparkles, description: "AI automatically investigates events: gathers context, analyzes imagery, identifies impacts, requests evidence, reasons about credibility, recommends actions", short: "AI" },
   { id: "hotspots", label: "Prediction Engine", icon: Crosshair, description: "M17 · Predict illegal mining hotspots · Future expansion · Confidence · Probability · Explainability", short: "M17" },
   { id: "predictions", label: "Environmental Intelligence", icon: TrendingUp, description: "M16 · Predict sediment · River impact · Forest loss · Downstream effects · Protected area risk", short: "M16" },
   { id: "fusion", label: "Evidence Fusion", icon: Layers, description: "M15 · Merge AI + Citizens + Satellite + Drone + Sensors + Government into one confidence score", short: "M15" },
@@ -58,23 +59,24 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
   const rewards = childrenArray[8] ?? null;
   const missions = childrenArray[9] ?? null;
   const copilot = childrenArray[10] ?? null;
-  const hotspots = childrenArray[11] ?? null;
-  const predictions = childrenArray[12] ?? null;
-  const fusion = childrenArray[13] ?? null;
-  const observations = childrenArray[14] ?? null;
-  const cv = childrenArray[15] ?? null;
-  const satellite = childrenArray[16] ?? null;
-  const notifications = childrenArray[17] ?? null;
-  const trust = childrenArray[18] ?? null;
-  const corroboration = childrenArray[19] ?? null;
-  const intel = childrenArray[20] ?? null;
-  const evidence = childrenArray[21] ?? null;
-  const kg = childrenArray[22] ?? null;
-  const temporal = childrenArray[23] ?? null;
-  const twin = childrenArray[24] ?? null;
-  const geo = childrenArray[25] ?? null;
-  const identity = childrenArray[26] ?? null;
-  const foundation = childrenArray[27] ?? null;
+  const autonomous = childrenArray[11] ?? null;
+  const hotspots = childrenArray[12] ?? null;
+  const predictions = childrenArray[13] ?? null;
+  const fusion = childrenArray[14] ?? null;
+  const observations = childrenArray[15] ?? null;
+  const cv = childrenArray[16] ?? null;
+  const satellite = childrenArray[17] ?? null;
+  const notifications = childrenArray[18] ?? null;
+  const trust = childrenArray[19] ?? null;
+  const corroboration = childrenArray[20] ?? null;
+  const intel = childrenArray[21] ?? null;
+  const evidence = childrenArray[22] ?? null;
+  const kg = childrenArray[23] ?? null;
+  const temporal = childrenArray[24] ?? null;
+  const twin = childrenArray[25] ?? null;
+  const geo = childrenArray[26] ?? null;
+  const identity = childrenArray[27] ?? null;
+  const foundation = childrenArray[28] ?? null;
 
   return (
     <div>
@@ -122,6 +124,7 @@ export function DashboardTabs({ children }: { children: React.ReactNode }) {
         {active === "rewards" && rewards}
         {active === "missions" && missions}
         {active === "copilot" && copilot}
+        {active === "autonomous" && autonomous}
         {active === "hotspots" && hotspots}
         {active === "predictions" && predictions}
         {active === "fusion" && fusion}

@@ -56,6 +56,7 @@ import { FusionDashboard } from "@/components/sentinel/fusion/fusion-dashboard";
 import { PredictionDashboard } from "@/components/sentinel/predictions/prediction-dashboard";
 import { HotspotDashboard } from "@/components/sentinel/hotspots/hotspot-dashboard";
 import { CopilotDashboard } from "@/components/sentinel/copilot/copilot-dashboard";
+import { AutonomousDashboard } from "@/components/sentinel/autonomous/autonomous-dashboard";
 import { MissionDashboard } from "@/components/sentinel/missions/mission-dashboard";
 import { RewardDashboard } from "@/components/sentinel/rewards/reward-dashboard";
 import { FraudDashboard } from "@/components/sentinel/fraud/fraud-dashboard";
@@ -79,6 +80,7 @@ import { getFusionService } from "@/modules/fusion";
 import { getPredictionService } from "@/modules/predictions";
 import { getHotspotService } from "@/modules/hotspots";
 import { getCopilotService } from "@/modules/copilot";
+import { getAutonomousInvestigationService } from "@/modules/autonomous";
 import { getMissionService } from "@/modules/missions";
 import { getRewardService } from "@/modules/rewards";
 import { getFraudService } from "@/modules/fraud";
@@ -122,6 +124,7 @@ export default async function DashboardPage() {
     predictionSummary,
     hotspotSummary,
     copilotSummary,
+    autonomousSummary,
     missionSummary,
     rewardSummary,
     fraudSummary,
@@ -159,6 +162,7 @@ export default async function DashboardPage() {
     getPredictionService().summary(),
     getHotspotService().summary(),
     getCopilotService().summary(),
+    getAutonomousInvestigationService().summary(),
     getMissionService().summary(),
     getRewardService().summary(),
     getFraudService().summary(),
@@ -332,6 +336,9 @@ export default async function DashboardPage() {
 
           {/* === M18: Digital Twin AI Copilot (second child = second tab) === */}
           <CopilotDashboard initialSummary={copilotSummary} />
+
+          {/* === Autonomous Investigation Engine (after AI Copilot) === */}
+          <AutonomousDashboard initialSummary={autonomousSummary} />
 
           {/* === M17: Prediction Engine (second child = second tab) === */}
           <HotspotDashboard initialSummary={hotspotSummary} />

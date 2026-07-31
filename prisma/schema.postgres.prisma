@@ -2689,3 +2689,149 @@ model DeploymentPipeline {
   @@index([environment])
   @@index([status])
 }
+
+// =============================================================================
+// AUTONOMOUS INVESTIGATION ENGINE
+// =============================================================================
+model AutonomousInvestigation {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  title           String
+  description     String
+  intelligenceEventId String?
+  triggerSource   String
+  triggerDescription String?
+  lat             Float?
+  lng             Float?
+  locationName    String?
+  region          String?
+  status          String   @default("triggered")
+  currentPhase    String   @default("triggered")
+  confidence      Float    @default(0.5)
+  confidenceLevel String   @default("uncertain")
+  confidenceTrend String   @default("stable")
+  credibilityAssessment String?
+  reasoningChain  String?
+  historicalEventsFound Int @default(0)
+  satelliteChangesDetected Int @default(0)
+  affectedEntitiesCount Int @default(0)
+  evidenceRequested Int @default(0)
+  evidenceReceived  Int @default(0)
+  recommendedAction String?
+  actionReasoning  String?
+  actionConfidence Float?
+  nearbyEventIds   String?
+  affectedEntityIds String?
+  missionIds       String?
+  satelliteSceneIds String?
+  model            String   @default("auto-investigator-v1")
+  triggeredAt      DateTime @default(now())
+  lastUpdated      DateTime @default(now())
+  concludedAt      DateTime?
+  metadata         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  phases           InvestigationPhase[]
+  evidenceRequests EvidenceRequest[]
+  confidenceUpdates ConfidenceUpdate[]
+  recommendations  ActionRecommendation[]
+
+  @@index([status])
+  @@index([currentPhase])
+  @@index([confidenceLevel])
+  @@index([triggerSource])
+  @@index([region])
+  @@index([triggeredAt])
+  @@index([confidence])
+}
+
+model InvestigationPhase {
+  id              String   @id @default(cuid())
+  investigationId String
+  phase           String
+  title           String
+  description     String
+  findings        String?
+  durationMs      Int?
+  status          String   @default("pending")
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([phase])
+  @@index([status])
+}
+
+model EvidenceRequest {
+  id              String   @id @default(cuid())
+  investigationId String
+  requestType     String
+  description     String
+  targetUserId    String?
+  targetUserName  String?
+  targetTrustTier String?
+  distanceKm      Float?
+  missionId       String?
+  status          String   @default("pending")
+  submittedAt     DateTime?
+  evidenceId      String?
+  qualityScore    Float?
+  requestedAt     DateTime @default(now())
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([status])
+  @@index([requestType])
+}
+
+model ConfidenceUpdate {
+  id              String   @id @default(cuid())
+  investigationId String
+  previousConfidence Float
+  newConfidence      Float
+  delta              Float
+  trigger         String
+  description     String
+  priorProbability Float?
+  likelihoodRatio  Float?
+  posteriorProbability Float?
+  updatedAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([trigger])
+  @@index([updatedAt])
+}
+
+model ActionRecommendation {
+  id              String   @id @default(cuid())
+  investigationId String
+  action          String
+  priority        String   @default("medium")
+  title           String
+  reasoning       String
+  confidence      Float    @default(0.7)
+  expectedOutcome String?
+  status          String   @default("pending")
+  executedAt      DateTime?
+  executedById    String?
+  executionNotes  String?
+  recommendedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  investigation   AutonomousInvestigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+  @@index([action])
+  @@index([status])
+  @@index([priority])
+}

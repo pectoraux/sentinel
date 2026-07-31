@@ -190,6 +190,9 @@ async function main() {
 
   console.log("[seed] Seeding M28 production readiness data...");
   await seedProductionData().catch((e) => console.log("[seed] M28 skipped:", e instanceof Error ? e.message : String(e)));
+
+  console.log("[seed] Seeding Autonomous Investigation Engine data...");
+  await seedAutonomousData().catch((e) => console.log("[seed] Autonomous skipped:", e instanceof Error ? e.message : String(e)));
    
   console.log("[seed] Done.");
 }
@@ -4593,6 +4596,198 @@ async function seedProductionData() {
   for (const d of deployments) { await prisma.deploymentPipeline.create({ data: d }); deployCount++; }
 
   console.log(`[seed] Seeded ${checkCount} readiness checks, ${incidentCount} incidents, ${runbookCount} runbooks, ${auditCount} accessibility audits, ${localeCount} i18n locales, ${deployCount} deployments.`);
+}
+
+// ---------------------------------------------------------------------------
+// Autonomous Investigation Engine seed data
+// ---------------------------------------------------------------------------
+
+async function seedAutonomousData() {
+  const existing = await prisma.autonomousInvestigation.count();
+  if (existing > 0) { console.log(`[seed] Autonomous data already exists — skipping.`); return; }
+  const admin = await prisma.user.findFirst({ select: { id: true } });
+  const now = new Date();
+  const hoursAgo = (n: number) => new Date(now.getTime() - n * 60 * 60 * 1000);
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+  let invCount = 0, phaseCount = 0, reqCount = 0, confCount = 0, recCount = 0;
+
+  // Get real intel events + twin entities for referencing
+  const [intelEvents, twinEntities, trustFactors] = await Promise.all([
+    prisma.intelligenceEvent.findMany({ select: { id: true, title: true, type: true, severity: true, lat: true, lng: true, locationName: true, createdAt: true }, take: 10 }),
+    prisma.twinEntity.findMany({ select: { id: true, name: true, type: true, lat: true, lng: true }, take: 20 }),
+    prisma.trustFactor.findMany({ where: { tier: { in: ["trusted", "elite", "verified"] } }, select: { userId: true, tier: true }, take: 10 }),
+  ]);
+
+  const findEvent = (type: string) => intelEvents.find(e => e.type === type) ?? intelEvents[0];
+  const findTwin = (type: string) => twinEntities.find(e => e.type === type) ?? twinEntities[0];
+
+  // === 3 AUTONOMOUS INVESTIGATIONS ===
+  const investigations = [
+    {
+      key: `auto-inv-prestea-${Date.now()}-001`,
+      title: "Autonomous Investigation — Prestea Illegal Mining Report",
+      description: "Auto-triggered when citizen reported illegal mining at Prestea Galamsey Site A. The AI investigator gathered historical context, analyzed satellite imagery, identified affected rivers, and requested evidence from nearby trusted contributors.",
+      intelligenceEventId: findEvent("illegal_mining")?.id,
+      triggerSource: "citizen_report",
+      triggerDescription: "Citizen 'Kwame Tetteh' created intelligence event 'Illegal mining at Prestea Galamsey Site A' with photo evidence.",
+      lat: 5.4321, lng: -2.1456, locationName: "Prestea Galamsey Site A", region: "Western",
+      status: "monitoring", currentPhase: "monitoring",
+      confidence: 0.82, confidenceLevel: "high", confidenceTrend: "increasing",
+      historicalEventsFound: 7, satelliteChangesDetected: 3, affectedEntitiesCount: 4,
+      evidenceRequested: 3, evidenceReceived: 2,
+      credibilityAssessment: "Based on autonomous investigation of the event at Prestea Galamsey Site A, the AI assesses this event as high credibility (82% confidence). The investigation was triggered by citizen report, which provides an initial confidence of 40%. The AI found 7 historical events in the vicinity, suggesting this is an area with a pattern of similar activity. This strongly supports the credibility of the current event. Satellite imagery comparison detected 3 changes — significant environmental modification visible between recent and older imagery. This strongly corroborates the reported event. 4 affected entities (rivers, forests, communities) identified within the impact zone. The AI requested 3 pieces of additional evidence from nearby trusted contributors. 2 have been received so far. Conclusion: The weight of evidence strongly supports the credibility of this event. Immediate action is recommended.",
+      recommendedAction: "dispatch_inspector", actionReasoning: "Confidence is 82% (high). Satellite confirms changes. Affected entities identified. Immediate inspector dispatch recommended.", actionConfidence: 0.82,
+      triggeredAt: daysAgo(3), lastUpdated: hoursAgo(2),
+      phases: [
+        { phase: "triggered", title: "Investigation Triggered", description: "Auto-triggered by citizen report. Initial confidence: 40%.", status: "completed", durationMs: 0, startedAt: daysAgo(3), completedAt: daysAgo(3), findings: JSON.stringify({ triggerSource: "citizen_report", initialConfidence: 0.4 }) },
+        { phase: "gathering_context", title: "Gathering Context", description: "Gathering nearby historical events for spatial and temporal context", status: "completed", durationMs: 1200, startedAt: daysAgo(3), completedAt: daysAgo(3), findings: JSON.stringify({ nearbyEventsFound: 7, confidenceDelta: 0.15, reasoning: "Found 7 historical events within 10km. This area has a pattern of similar activity, increasing credibility." }) },
+        { phase: "analyzing_imagery", title: "Analyzing Imagery", description: "Comparing recent satellite imagery with older imagery for change detection", status: "completed", durationMs: 3400, startedAt: daysAgo(3), completedAt: daysAgo(3), findings: JSON.stringify({ scenesAnalyzed: 12, changesDetected: 3, confidenceDelta: 0.2, reasoning: "Satellite imagery comparison detected 3 changes — significant environmental modification visible." }) },
+        { phase: "identifying_impacts", title: "Identifying Impacts", description: "Identifying affected rivers, forests, protected areas, and communities", status: "completed", durationMs: 800, startedAt: daysAgo(3), completedAt: daysAgo(3), findings: JSON.stringify({ affectedEntitiesCount: 4, entities: ["Pra River", "Prestea Community", "Ankobra Forest", "Bonsa River"], confidenceDelta: 0.08, reasoning: "4 affected entities identified within 5km impact zone." }) },
+        { phase: "requesting_evidence", title: "Requesting Evidence", description: "Auto-creating missions for trusted nearby contributors", status: "completed", durationMs: 500, startedAt: daysAgo(3), completedAt: daysAgo(3), findings: JSON.stringify({ evidenceRequested: 3, reasoning: "Auto-created 3 evidence requests for nearby trusted contributors. Expected confidence boost: +0.20" }) },
+        { phase: "reasoning", title: "Reasoning", description: "Explaining why the event is credible or not — full reasoning chain", status: "completed", durationMs: 2100, startedAt: daysAgo(2), completedAt: daysAgo(2), findings: JSON.stringify({ credibilityAssessment: "High credibility (82%). Strong corroboration from satellite + historical patterns.", recommendedAction: "dispatch_inspector" }) },
+        { phase: "monitoring", title: "Monitoring", description: "Continuously updating confidence as new evidence arrives", status: "in_progress", startedAt: hoursAgo(12), findings: JSON.stringify({ currentConfidence: 0.82, pendingEvidence: 1, lastUpdate: "Evidence received from trusted contributor — confidence increased +0.05" }) },
+      ],
+      confidenceUpdates: [
+        { trigger: "initial", description: "Initial confidence set based on trigger source: Citizen Report", previousConfidence: 0, newConfidence: 0.4, delta: 0.4, priorProbability: 0.5, likelihoodRatio: 0.67, posteriorProbability: 0.4, updatedAt: daysAgo(3) },
+        { trigger: "evidence_received", description: "7 historical events found nearby", previousConfidence: 0.4, newConfidence: 0.55, delta: 0.15, priorProbability: 0.4, likelihoodRatio: 1.38, posteriorProbability: 0.55, updatedAt: daysAgo(3) },
+        { trigger: "satellite_analyzed", description: "3 satellite changes detected", previousConfidence: 0.55, newConfidence: 0.75, delta: 0.2, priorProbability: 0.55, likelihoodRatio: 1.45, posteriorProbability: 0.75, updatedAt: daysAgo(3) },
+        { trigger: "evidence_received", description: "4 affected entities identified", previousConfidence: 0.75, newConfidence: 0.77, delta: 0.02, priorProbability: 0.75, likelihoodRatio: 1.08, posteriorProbability: 0.77, updatedAt: daysAgo(3) },
+        { trigger: "mission_completed", description: "Evidence received from trusted contributor — photo verification", previousConfidence: 0.77, newConfidence: 0.82, delta: 0.05, priorProbability: 0.77, likelihoodRatio: 1.22, posteriorProbability: 0.82, updatedAt: hoursAgo(2) },
+      ],
+      recommendations: [
+        { action: "dispatch_inspector", priority: "urgent", title: "Dispatch Inspector", reasoning: "Confidence is 82% (high). Satellite confirms changes. Affected entities identified. Immediate inspector dispatch recommended.", confidence: 0.82, expectedOutcome: "Send a field inspector to verify the site immediately", status: "pending", recommendedAt: daysAgo(2) },
+        { action: "notify_agency", priority: "high", title: "Notify Agency", reasoning: "Confidence is 82%. Notify EPA Western Region for coordinated response.", confidence: 0.82, expectedOutcome: "Notify EPA, Minerals Commission, or other relevant agency", status: "pending", recommendedAt: daysAgo(2) },
+      ],
+    },
+    {
+      key: `auto-inv-atewa-${Date.now()}-002`,
+      title: "Autonomous Investigation — Atewa Forest Deforestation",
+      description: "Auto-triggered by Computer Vision detection of forest loss in Atewa Forest Reserve sector 3. The AI compared satellite imagery, identified the protected forest as affected, and escalated due to protected area status.",
+      intelligenceEventId: findEvent("deforestation")?.id,
+      triggerSource: "cv_detection",
+      triggerDescription: "Computer Vision detected forest_loss with 91% confidence in Atewa Forest Reserve sector 3.",
+      lat: 6.1667, lng: -0.5500, locationName: "Atewa Forest Reserve — Sector 3", region: "Eastern",
+      status: "monitoring", currentPhase: "monitoring",
+      confidence: 0.91, confidenceLevel: "very_high", confidenceTrend: "increasing",
+      historicalEventsFound: 3, satelliteChangesDetected: 5, affectedEntitiesCount: 6,
+      evidenceRequested: 3, evidenceReceived: 3,
+      credibilityAssessment: "Based on autonomous investigation of the event at Atewa Forest Reserve, the AI assesses this event as very high credibility (91% confidence). The investigation was triggered by CV detection, which provides a high initial confidence of 75%. The AI found 3 historical events in the vicinity. Satellite imagery comparison detected 5 changes — significant environmental modification. 6 affected entities identified including the protected forest reserve itself. All 3 evidence requests fulfilled. Conclusion: The weight of evidence strongly supports the credibility of this event. Immediate action is recommended.",
+      recommendedAction: "escalate", actionReasoning: "Confidence is 91% (very high). Protected forest reserve affected. Escalate to national level due to protected area status.", actionConfidence: 0.91,
+      triggeredAt: daysAgo(5), lastUpdated: hoursAgo(6),
+      phases: [
+        { phase: "triggered", title: "Investigation Triggered", description: "Auto-triggered by CV detection. Initial confidence: 75%.", status: "completed", durationMs: 0, startedAt: daysAgo(5), completedAt: daysAgo(5), findings: JSON.stringify({ triggerSource: "cv_detection", initialConfidence: 0.75 }) },
+        { phase: "gathering_context", title: "Gathering Context", description: "Found 3 historical events nearby", status: "completed", durationMs: 900, startedAt: daysAgo(5), completedAt: daysAgo(5), findings: JSON.stringify({ nearbyEventsFound: 3, confidenceDelta: 0.09 }) },
+        { phase: "analyzing_imagery", title: "Analyzing Imagery", description: "Detected 5 satellite changes in protected forest", status: "completed", durationMs: 2800, startedAt: daysAgo(5), completedAt: daysAgo(5), findings: JSON.stringify({ changesDetected: 5, confidenceDelta: 0.07 }) },
+        { phase: "identifying_impacts", title: "Identifying Impacts", description: "6 affected entities including protected forest reserve", status: "completed", durationMs: 600, startedAt: daysAgo(5), completedAt: daysAgo(5), findings: JSON.stringify({ affectedEntitiesCount: 6 }) },
+        { phase: "requesting_evidence", title: "Requesting Evidence", description: "3 evidence requests to nearby trusted contributors", status: "completed", durationMs: 400, startedAt: daysAgo(5), completedAt: daysAgo(5), findings: JSON.stringify({ evidenceRequested: 3 }) },
+        { phase: "reasoning", title: "Reasoning", description: "Very high credibility — escalate due to protected area", status: "completed", durationMs: 1500, startedAt: daysAgo(4), completedAt: daysAgo(4), findings: JSON.stringify({ recommendedAction: "escalate" }) },
+        { phase: "monitoring", title: "Monitoring", description: "All evidence received. Confidence at 91%.", status: "in_progress", startedAt: daysAgo(4), findings: JSON.stringify({ currentConfidence: 0.91 }) },
+      ],
+      confidenceUpdates: [
+        { trigger: "initial", description: "Initial confidence: CV detection", previousConfidence: 0, newConfidence: 0.75, delta: 0.75, priorProbability: 0.5, likelihoodRatio: 3.0, posteriorProbability: 0.75, updatedAt: daysAgo(5) },
+        { trigger: "evidence_received", description: "3 historical events found", previousConfidence: 0.75, newConfidence: 0.84, delta: 0.09, priorProbability: 0.75, likelihoodRatio: 1.36, posteriorProbability: 0.84, updatedAt: daysAgo(5) },
+        { trigger: "satellite_analyzed", description: "5 satellite changes detected in protected forest", previousConfidence: 0.84, newConfidence: 0.88, delta: 0.04, priorProbability: 0.84, likelihoodRatio: 1.25, posteriorProbability: 0.88, updatedAt: daysAgo(5) },
+        { trigger: "mission_completed", description: "All 3 evidence requests fulfilled", previousConfidence: 0.88, newConfidence: 0.91, delta: 0.03, priorProbability: 0.88, likelihoodRatio: 1.17, posteriorProbability: 0.91, updatedAt: hoursAgo(6) },
+      ],
+      recommendations: [
+        { action: "escalate", priority: "urgent", title: "Escalate", reasoning: "Confidence is 91% (very high). Protected forest reserve affected. Escalate to national level — EPA Director-General and Ministry of Lands.", confidence: 0.91, expectedOutcome: "Escalate to higher jurisdiction or national level", status: "pending", recommendedAt: daysAgo(4) },
+        { action: "dispatch_inspector", priority: "high", title: "Dispatch Inspector", reasoning: "Joint EPA + Forestry Commission inspection recommended.", confidence: 0.91, expectedOutcome: "Send a field inspector to verify the site immediately", status: "pending", recommendedAt: daysAgo(4) },
+      ],
+    },
+    {
+      key: `auto-inv-obuasi-${Date.now()}-003`,
+      title: "Autonomous Investigation — Obuasi Mercury Contamination",
+      description: "Auto-triggered by AI Observation Engine detecting water quality anomaly in Oda River near Obuasi. Investigation found mercury levels 4× WHO limit via lab analysis correlation.",
+      intelligenceEventId: findEvent("water_contamination")?.id,
+      triggerSource: "ai_observation",
+      triggerDescription: "AI Observation Engine detected water_quality anomaly: turbidity 340% above baseline in Oda River near Obuasi.",
+      lat: 6.2062, lng: -1.6678, locationName: "Obuasi — Oda River", region: "Ashanti",
+      status: "monitoring", currentPhase: "monitoring",
+      confidence: 0.68, confidenceLevel: "moderate", confidenceTrend: "increasing",
+      historicalEventsFound: 2, satelliteChangesDetected: 1, affectedEntitiesCount: 3,
+      evidenceRequested: 2, evidenceReceived: 1,
+      credibilityAssessment: "Based on autonomous investigation of the event at Obuasi — Oda River, the AI assesses this event as moderate credibility (68% confidence). The investigation was triggered by AI observation, providing initial confidence of 65%. 2 historical events found nearby. 1 satellite change detected. 3 affected entities identified including Oda River and downstream communities. 1 of 2 evidence requests fulfilled. Conclusion: The evidence moderately supports the event's credibility, but additional verification is recommended before taking enforcement action.",
+      recommendedAction: "request_lab_analysis", actionReasoning: "Confidence is 68% (moderate). Affected rivers identified. Lab analysis of water/soil samples will confirm mercury contamination.", actionConfidence: 0.68,
+      triggeredAt: daysAgo(7), lastUpdated: hoursAgo(18),
+      phases: [
+        { phase: "triggered", title: "Investigation Triggered", description: "Auto-triggered by AI observation. Initial confidence: 65%.", status: "completed", durationMs: 0, startedAt: daysAgo(7), completedAt: daysAgo(7), findings: JSON.stringify({ triggerSource: "ai_observation", initialConfidence: 0.65 }) },
+        { phase: "gathering_context", title: "Gathering Context", description: "2 historical events found", status: "completed", durationMs: 1100, startedAt: daysAgo(7), completedAt: daysAgo(7), findings: JSON.stringify({ nearbyEventsFound: 2, confidenceDelta: 0.06 }) },
+        { phase: "analyzing_imagery", title: "Analyzing Imagery", description: "1 satellite change detected", status: "completed", durationMs: 2200, startedAt: daysAgo(7), completedAt: daysAgo(7), findings: JSON.stringify({ changesDetected: 1, confidenceDelta: 0.04 }) },
+        { phase: "identifying_impacts", title: "Identifying Impacts", description: "3 affected entities: Oda River, Obuasi community, downstream farms", status: "completed", durationMs: 700, startedAt: daysAgo(7), completedAt: daysAgo(7), findings: JSON.stringify({ affectedEntitiesCount: 3 }) },
+        { phase: "requesting_evidence", title: "Requesting Evidence", description: "2 evidence requests: water sample + photo", status: "completed", durationMs: 400, startedAt: daysAgo(7), completedAt: daysAgo(7), findings: JSON.stringify({ evidenceRequested: 2 }) },
+        { phase: "reasoning", title: "Reasoning", description: "Moderate credibility — request lab analysis", status: "completed", durationMs: 1800, startedAt: daysAgo(5), completedAt: daysAgo(5), findings: JSON.stringify({ recommendedAction: "request_lab_analysis" }) },
+        { phase: "monitoring", title: "Monitoring", description: "1 evidence request pending. Awaiting water sample.", status: "in_progress", startedAt: daysAgo(5), findings: JSON.stringify({ currentConfidence: 0.68, pendingEvidence: 1 }) },
+      ],
+      confidenceUpdates: [
+        { trigger: "initial", description: "Initial confidence: AI observation", previousConfidence: 0, newConfidence: 0.65, delta: 0.65, priorProbability: 0.5, likelihoodRatio: 1.86, posteriorProbability: 0.65, updatedAt: daysAgo(7) },
+        { trigger: "evidence_received", description: "2 historical events found", previousConfidence: 0.65, newConfidence: 0.71, delta: 0.06, priorProbability: 0.65, likelihoodRatio: 1.18, posteriorProbability: 0.71, updatedAt: daysAgo(7) },
+        { trigger: "satellite_analyzed", description: "1 satellite change detected", previousConfidence: 0.71, newConfidence: 0.73, delta: 0.02, priorProbability: 0.71, likelihoodRatio: 1.07, posteriorProbability: 0.73, updatedAt: daysAgo(7) },
+        { trigger: "evidence_received", description: "1 evidence request fulfilled (photo)", previousConfidence: 0.73, newConfidence: 0.68, delta: -0.05, priorProbability: 0.73, likelihoodRatio: 0.93, posteriorProbability: 0.68, updatedAt: hoursAgo(18) },
+      ],
+      recommendations: [
+        { action: "request_lab_analysis", priority: "high", title: "Request Lab Analysis", reasoning: "Confidence is 68% (moderate). Affected rivers identified. Lab analysis of water samples will confirm mercury contamination levels.", confidence: 0.68, expectedOutcome: "Send water/soil samples to lab for mercury/heavy metal analysis", status: "pending", recommendedAt: daysAgo(5) },
+      ],
+    },
+  ];
+
+  for (const inv of investigations) {
+    const { phases, confidenceUpdates, recommendations, ...invData } = inv;
+    const created = await prisma.autonomousInvestigation.create({
+      data: {
+        ...invData,
+        nearbyEventIds: JSON.stringify([]),
+        affectedEntityIds: JSON.stringify([findTwin("river")?.id, findTwin("forest")?.id].filter(Boolean)),
+        missionIds: JSON.stringify([]),
+        satelliteSceneIds: JSON.stringify([]),
+        reasoningChain: JSON.stringify([
+          `Triggered by ${inv.triggerSource} → initial confidence`,
+          `${inv.historicalEventsFound} historical events found`,
+          `${inv.satelliteChangesDetected} satellite change(s) detected`,
+          `${inv.affectedEntitiesCount} affected entities identified`,
+          `${inv.evidenceRequested} evidence request(s) sent`,
+          `Final confidence: ${(inv.confidence * 100).toFixed(0)}%`,
+          `Recommended: ${inv.recommendedAction}`,
+        ]),
+        metadata: JSON.stringify({ seed: true }),
+      },
+    });
+    invCount++;
+
+    for (const p of phases) {
+      await prisma.investigationPhase.create({ data: { investigationId: created.id, ...p } });
+      phaseCount++;
+    }
+    for (const cu of confidenceUpdates) {
+      await prisma.confidenceUpdate.create({ data: { investigationId: created.id, ...cu } });
+      confCount++;
+    }
+    for (const rec of recommendations) {
+      await prisma.actionRecommendation.create({ data: { investigationId: created.id, ...rec } });
+      recCount++;
+    }
+
+    // Create evidence requests for this investigation
+    for (let i = 0; i < inv.evidenceRequested; i++) {
+      const tf = trustFactors[i % trustFactors.length];
+      const reqTypes = ["photo", "water_sample", "witness_statement"];
+      await prisma.evidenceRequest.create({
+        data: {
+          investigationId: created.id,
+          requestType: reqTypes[i % reqTypes.length]!,
+          description: `AI requesting ${reqTypes[i % reqTypes.length]} from ${tf?.tier ?? "trusted"} contributor near ${inv.locationName}.`,
+          targetUserId: tf?.userId,
+          targetTrustTier: tf?.tier,
+          status: i < inv.evidenceReceived ? "submitted" : "pending",
+          submittedAt: i < inv.evidenceReceived ? daysAgo(1) : null,
+          qualityScore: i < inv.evidenceReceived ? 0.8 : null,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+      reqCount++;
+    }
+  }
+
+  console.log(`[seed] Seeded ${invCount} autonomous investigations (${phaseCount} phases, ${reqCount} evidence requests, ${confCount} confidence updates, ${recCount} recommendations).`);
 }
 
 main()
