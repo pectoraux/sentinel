@@ -428,11 +428,11 @@ export function AppShell({ children }: AppShellProps) {
             <ShellHero roleConfig={roleConfig} activeItem={activeItem} />
             <div className="mt-6">
               {activeChild ?? (
-                <PlaceholderContent
-                  item={activeItem}
-                  role={role}
-                  onNavigate={handleNavigate}
-                />
+                <div className="flex min-h-[400px] items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">This section is loading. If it doesn't appear, try another section from the sidebar.</p>
+                  </div>
+                </div>
               )}
             </div>
             <ShellFooter />
